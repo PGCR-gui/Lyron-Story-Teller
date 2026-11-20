@@ -1,0 +1,85 @@
+# ==========================================
+# Arquivos Sensíveis, Chaves e Assinatura
+# ==========================================
+# Propriedades de assinatura definidas no app/build.gradle.kts
+release.properties
+keystore.properties
+signing.properties
+
+# Keystores e certificados
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Configurações locais e variáveis de ambiente
+local.properties
+.env
+.env.*
+google-services.json
+
+# ==========================================
+# Build Android, Gradle e Kotlin
+# ==========================================
+# Saídas de compilação (raiz e submódulos como /app/build)
+build/
+**/build/
+/bin/
+/gen/
+/out/
+
+# Cache e estado interno do Gradle e Kotlin
+.gradle/
+.kotlin/
+
+# Artefatos compilados
+*.apk
+*.ap_
+*.aab
+*.aar
+*.dex
+*.class
+
+# Build nativo e ProGuard/R8
+.cxx/
+.externalNativeBuild/
+proguard/
+**/proguard/
+mapping.txt
+
+# ==========================================
+# IDEs e Editores (Code On the Go / Studio)
+# ==========================================
+# Cache e estado do editor mobile (.cg encontrado no projeto)
+.cg/
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+.navigation/
+captures/
+vcs.xml
+
+# VS Code
+.vscode/
+
+# ==========================================
+# Logs, Relatórios e Sistema Operacional
+# ==========================================
+*.log
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Arquivos temporários de SO
+.DS_Store
+Thumbs.db
+*~
+
