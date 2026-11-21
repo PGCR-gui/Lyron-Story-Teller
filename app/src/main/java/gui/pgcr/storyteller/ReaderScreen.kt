@@ -132,7 +132,7 @@ internal fun ChapterBodyContent(chapter: Chapter, fontSize: Float) {
             if (position > cursor) {
                 Text(
                     annotated.subSequence(cursor, position),
-                    color = Color(0xFFE2DFE9), fontSize = fontSize.sp,
+                    color = PrimaryText, fontSize = fontSize.sp,
                     lineHeight = (fontSize * 1.7f).sp
                 )
             }
@@ -146,7 +146,7 @@ internal fun ChapterBodyContent(chapter: Chapter, fontSize: Float) {
         if (cursor < chapter.body.length) {
             Text(
                 annotated.subSequence(cursor, chapter.body.length),
-                color = Color(0xFFE2DFE9), fontSize = fontSize.sp,
+                color = PrimaryText, fontSize = fontSize.sp,
                 lineHeight = (fontSize * 1.7f).sp
             )
         }
@@ -183,7 +183,7 @@ internal fun ReaderScreen(
     val chapter = story.chapters[chapterIndex]
     val scrollState = rememberScrollState()
     val theme = readerThemeColors(readerThemeId)
-    val fontFamily = resolveFontFamily(readerFontFamily, loadCustom = true)
+    val fontFamily = remember(readerFontFamily) { resolveFontFamily(readerFontFamily, loadCustom = true, context = context) }
     var showReaderMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(openMenuTick) {
@@ -551,7 +551,7 @@ internal fun ReaderScreen(
     if (showReaderMenu) {
         AlertDialog(
             onDismissRequest = { showReaderMenu = false },
-            title = { Text("Leitura", color = Color.White) },
+            title = { Text("Leitura", color = PrimaryText) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text("Tema", color = SecondaryText, fontSize = 12.sp)
@@ -561,7 +561,7 @@ internal fun ReaderScreen(
                             modifier = Modifier.fillMaxWidth().clickable { onReaderThemeChange(id) }.padding(vertical = 2.dp)
                         ) {
                             RadioButton(selected = readerThemeId == id, onClick = { onReaderThemeChange(id) }, colors = RadioButtonDefaults.colors(selectedColor = Accent))
-                            Text(label, color = Color.White, fontSize = 14.sp)
+                            Text(label, color = PrimaryText, fontSize = 14.sp)
                         }
                     }
                     Text("Fonte", color = SecondaryText, fontSize = 12.sp)
@@ -571,15 +571,16 @@ internal fun ReaderScreen(
                             modifier = Modifier.fillMaxWidth().clickable { onReaderFontFamilyChange(id) }.padding(vertical = 2.dp)
                         ) {
                             RadioButton(selected = readerFontFamily == id, onClick = { onReaderFontFamilyChange(id) }, colors = RadioButtonDefaults.colors(selectedColor = Accent))
-                            Text(label, color = Color.White, fontSize = 14.sp)
+                            ReaderFontSample(fontId = id, label = label, modifier = Modifier.weight(1f))
                         }
                     }
+                    CustomFontSection(selectedId = readerFontFamily, onSelect = onReaderFontFamilyChange)
                     Text("Tamanho: ${fontSize.toInt()} sp", color = SecondaryText, fontSize = 12.sp)
                     Slider(
                         value = fontSize,
                         onValueChange = onFontSizeChange,
-                        valueRange = 14f..32f,
-                        steps = 17,
+                        valueRange = 8f..32f,
+                        steps = 23,
                         colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent)
                     )
                     Text("Espaçamento de linhas: ${"%.2f".format(lineHeightMult)}×", color = SecondaryText, fontSize = 12.sp)
@@ -617,7 +618,7 @@ internal fun ReaderScreen(
                 TextButton(onClick = { showReaderMenu = false }) { Text("Fechar", color = Accent) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -653,7 +654,7 @@ internal fun ReaderScreen(
             title = { Text(endTitle) },
             text = { Text(endMessage) },
             confirmButton = { TextButton(onClick = onDismissEnding) { Text("OK") } },
-            containerColor = CardColor, titleContentColor = Color.White, textContentColor = SecondaryText
+            containerColor = CardColor, titleContentColor = PrimaryText, textContentColor = SecondaryText
         )
     }
 }

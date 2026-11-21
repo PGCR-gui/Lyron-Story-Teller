@@ -137,7 +137,7 @@ internal fun SettingsHubScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Configurações", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Configurações", color = PrimaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text("Escolha uma categoria para personalizar sua experiência.", color = SecondaryText, fontSize = 13.sp)
             Spacer(Modifier.height(6.dp))
         }
@@ -163,6 +163,14 @@ internal fun SettingsHubScreen(
                 title = "Leitor de histórias",
                 subtitle = "$currentReaderThemeName · $currentReaderModeName · ${settings.defaultReaderFontSize.toInt()} sp",
                 onClick = { onNavigate(AppScreen.SETTINGS_READER) }
+            )
+        }
+        item {
+            SettingsCategoryCard(
+                icon = "🔔",
+                title = "Notificações",
+                subtitle = "Capítulos novos de favoritas e de autores que você segue",
+                onClick = { onNavigate(AppScreen.SETTINGS_NOTIFICATIONS) }
             )
         }
         item {
@@ -215,7 +223,7 @@ internal fun SettingsCategoryCard(
                 Text(icon, color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, color = PrimaryText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, color = SecondaryText, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Text("›", color = Accent, fontSize = 26.sp)
@@ -251,60 +259,24 @@ internal fun SettingsProfileScreen(
 }
 
 @Composable
-internal fun SettingsAppearanceScreen(
-    settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("Tema do aplicativo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text("Escolha a paleta de cores da interface principal.", color = SecondaryText, fontSize = 13.sp)
-        THEME_OPTIONS.forEach { (id, label) ->
-            val selected = settings.themeId == id
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSettingsChange(settings.copy(themeId = id)) },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (selected) Accent.copy(alpha = 0.16f) else CardColor
-                ),
-                border = if (selected) BorderStroke(1.dp, Accent) else null,
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                ) {
-                    RadioButton(
-                        selected = selected,
-                        onClick = { onSettingsChange(settings.copy(themeId = id)) },
-                        colors = RadioButtonDefaults.colors(selectedColor = Accent)
-                    )
-                    Text(label, color = if (selected) Color.White else SecondaryText, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun SettingsReaderScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit
 ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+    // Pré-visualização sempre visível: muda na hora ao trocar tema, fonte, tamanho, espaçamento ou margem.
+    ReaderLivePreview(
+        settings = settings,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)
+    )
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Modo de leitura padrão", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Modo de leitura padrão", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             FilterChip(
                 selected = settings.readerMode == "continuous",
@@ -321,15 +293,15 @@ internal fun SettingsReaderScreen(
         HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
         Text(
             "Tamanho padrão do texto: ${settings.defaultReaderFontSize.toInt()} sp",
-            color = Color.White,
+            color = PrimaryText,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
         )
         Slider(
             value = settings.defaultReaderFontSize,
             onValueChange = { onSettingsChange(settings.copy(defaultReaderFontSize = it)) },
-            valueRange = 14f..28f,
-            steps = 6,
+            valueRange = 8f..28f,
+            steps = 19,
             colors = SliderDefaults.colors(
                 thumbColor = Accent,
                 activeTrackColor = Accent,
@@ -338,27 +310,22 @@ internal fun SettingsReaderScreen(
         )
 
         HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
-        Text("Tema do leitor", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Tema do leitor", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Cada tema aparece com a fonte e o tamanho escolhidos.", color = SecondaryText, fontSize = 12.sp)
         READER_THEME_OPTIONS.forEach { (id, label) ->
-            val selected = settings.readerThemeId == id
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSettingsChange(settings.copy(readerThemeId = id)) }
-                    .padding(vertical = 4.dp)
-            ) {
-                RadioButton(
-                    selected = selected,
-                    onClick = { onSettingsChange(settings.copy(readerThemeId = id)) },
-                    colors = RadioButtonDefaults.colors(selectedColor = Accent)
-                )
-                Text(label, color = if (selected) Color.White else SecondaryText)
-            }
+            ReaderThemeOptionCard(
+                themeId = id,
+                label = label,
+                fontId = settings.readerFontFamily,
+                fontSize = settings.defaultReaderFontSize,
+                lineHeightMult = settings.readerLineHeight,
+                selected = settings.readerThemeId == id,
+                onClick = { onSettingsChange(settings.copy(readerThemeId = id)) }
+            )
         }
 
         HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
-        Text("Fonte do leitor", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Fonte do leitor", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         READER_FONT_OPTIONS.forEach { (id, label) ->
             val selected = settings.readerFontFamily == id
             Row(
@@ -373,9 +340,13 @@ internal fun SettingsReaderScreen(
                     onClick = { onSettingsChange(settings.copy(readerFontFamily = id)) },
                     colors = RadioButtonDefaults.colors(selectedColor = Accent)
                 )
-                Text(label, color = if (selected) Color.White else SecondaryText)
+                ReaderFontSample(fontId = id, label = label, modifier = Modifier.weight(1f))
             }
         }
+        CustomFontSection(
+            selectedId = settings.readerFontFamily,
+            onSelect = { onSettingsChange(settings.copy(readerFontFamily = it)) }
+        )
 
         HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
         Row(
@@ -383,7 +354,7 @@ internal fun SettingsReaderScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Carregar fontes personalizadas", color = Color.White, fontWeight = FontWeight.Medium)
+                Text("Carregar fontes personalizadas", color = PrimaryText, fontWeight = FontWeight.Medium)
                 Text("Habilita as fontes especiais embutidas no leitor.", color = SecondaryText, fontSize = 12.sp)
             }
             Switch(
@@ -392,6 +363,7 @@ internal fun SettingsReaderScreen(
                 colors = SwitchDefaults.colors(checkedTrackColor = Accent)
             )
         }
+    }
     }
 }
 
@@ -407,7 +379,7 @@ internal fun SettingsContentScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Exportação de histórias", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Exportação de histórias", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Card(
             colors = CardDefaults.cardColors(containerColor = CardColor),
             shape = RoundedCornerShape(16.dp),
@@ -418,7 +390,7 @@ internal fun SettingsContentScreen(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Confirmar modo ao exportar .lyr", color = Color.White, fontWeight = FontWeight.Medium)
+                    Text("Confirmar modo ao exportar .lyr", color = PrimaryText, fontWeight = FontWeight.Medium)
                     Text(
                         "Pergunta se o arquivo deve ser somente leitura ou editável com senha antes de salvar.",
                         color = SecondaryText,
@@ -455,7 +427,7 @@ internal fun SettingsAboutScreen() {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Lyron Story Teller", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Versão de testes 0.05", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Versão de testes 0.05", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Tudo aqui ainda é muito experimental e se encontra em processo de desenvolvimento. " +
                         "Crie histórias lineares ou interativas, exporte pacotes .lyr com mídias e leia no seu ritmo.",
@@ -490,7 +462,7 @@ internal fun SettingsAboutScreen() {
                             .background(Color(0xFFFFF4DC))
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Ícone do app", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Ícone do app", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text(
                             "Ícone criado por Magnific, via Flaticon.",
                             color = SecondaryText,
@@ -556,11 +528,13 @@ internal fun ProfileSettingsSection(
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            if (retainImageReadPermission(context, uri)) {
-                photoUri = uri.toString()
+            retainImageReadPermission(context, uri)
+            val local = importPickedAvatar(context, uri.toString())
+            if (local != null) {
+                photoUri = local
                 photoError = ""
             } else {
-                photoError = "Não foi possível manter o acesso à foto. Tente outra imagem."
+                photoError = "Não foi possível ler a foto. Tente outra imagem."
             }
         }
     }
@@ -589,7 +563,7 @@ internal fun ProfileSettingsSection(
         usernameCheck == UsernameCheck.UNKNOWN
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Perfil", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Perfil", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -599,7 +573,7 @@ internal fun ProfileSettingsSection(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0xFF302744), RoundedCornerShape(50))
+                    .background(SurfaceAlt, RoundedCornerShape(50))
                     .clickable { photoPicker.launch(arrayOf("image/*")) },
                 contentAlignment = Alignment.Center
             ) {
@@ -621,12 +595,12 @@ internal fun ProfileSettingsSection(
                 }
                 if (photoUri != null) {
                     TextButton(onClick = { photoUri = null }) {
-                        Text("Remover foto", color = Color(0xFFFF8B9A))
+                        Text("Remover foto", color = DangerColor)
                     }
                 }
             }
             if (photoError.isNotBlank()) {
-                Text(photoError, color = Color(0xFFFF8B9A), fontSize = 12.sp)
+                Text(photoError, color = DangerColor, fontSize = 12.sp)
             }
         }
 
@@ -668,7 +642,7 @@ internal fun ProfileSettingsSection(
             label = { Text("Apelido / pseudônimo") },
             singleLine = true
         )
-        Text("Usar como nome de autor:", color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text("Usar como nome de autor:", color = PrimaryText, fontWeight = FontWeight.SemiBold)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().clickable { useFullName = true }
@@ -678,7 +652,7 @@ internal fun ProfileSettingsSection(
                 onClick = { useFullName = true },
                 colors = RadioButtonDefaults.colors(selectedColor = Accent)
             )
-            Text(fullName.ifBlank { "Nome completo" }, color = if (fullName.isBlank()) SecondaryText else Color.White)
+            Text(fullName.ifBlank { "Nome completo" }, color = if (fullName.isBlank()) SecondaryText else PrimaryText)
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -689,7 +663,7 @@ internal fun ProfileSettingsSection(
                 onClick = { useFullName = false },
                 colors = RadioButtonDefaults.colors(selectedColor = Accent)
             )
-            Text(nickname.ifBlank { "Apelido / pseudônimo" }, color = if (nickname.isBlank()) SecondaryText else Color.White)
+            Text(nickname.ifBlank { "Apelido / pseudônimo" }, color = if (nickname.isBlank()) SecondaryText else PrimaryText)
         }
         Text(
             "Nome de autor atual: " + UserProfile(fullName.trim(), nickname.trim(), useFullName).authorName,
@@ -697,7 +671,7 @@ internal fun ProfileSettingsSection(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
-        Text("Biografia", color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text("Biografia", color = PrimaryText, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(
             value = bio,
             onValueChange = { if (it.length <= 280) bio = it },
@@ -707,7 +681,7 @@ internal fun ProfileSettingsSection(
             label = { Text("Sobre você") },
             placeholder = { Text("Uma frase sobre o que você escreve…") }
         )
-        Text("Privacidade do perfil público", color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text("Privacidade do perfil público", color = PrimaryText, fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("Mostrar biografia", color = SecondaryText, modifier = Modifier.weight(1f))
             Switch(checked = publicBio, onCheckedChange = { publicBio = it }, colors = SwitchDefaults.colors(checkedTrackColor = Accent))
@@ -738,7 +712,7 @@ internal fun ProfileSettingsSection(
                 )
             },
             enabled = !busy && usernameAllowsSave,
-            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F)),
+            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
@@ -752,7 +726,7 @@ internal fun ProfileSettingsSection(
         if (status != null) {
             Text(
                 status.first,
-                color = if (status.second) Color(0xFFFF8B9A) else Color(0xFF9DE0B8),
+                color = if (status.second) DangerColor else SuccessColor,
                 fontSize = 13.sp
             )
         }

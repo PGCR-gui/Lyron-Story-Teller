@@ -121,6 +121,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Abas das telas iniciais, na ordem da barra inferior. */
+private val MAIN_TAB_SCREENS = listOf(AppScreen.HOME, AppScreen.EXPLORE, AppScreen.LIBRARY, AppScreen.PROFILE)
+
+private fun mainTabIndex(screen: AppScreen): Int = MAIN_TAB_SCREENS.indexOf(screen)
+
 class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -175,15 +180,27 @@ fun StoryVerseApp() {
     var userProfile by remember { mutableStateOf(loadUserProfile(context)) }
     var appSettings by remember {
         val loaded = loadAppSettings(context)
-        appThemeState.value = themeColorsFor(loaded.themeId)
+        appThemeState.value = themeColorsFor(loaded)
         mutableStateOf(loaded)
     }
     val favoriteIds = remember {
         mutableStateListOf<String>().apply { addAll(loadFavoriteIds(context)) }
     }
+    val requestNotificationPermission = rememberNotificationPermissionRequest()
     fun toggleFavorite(storyId: String) {
-        if (storyId in favoriteIds) favoriteIds.remove(storyId) else favoriteIds.add(storyId)
-        saveFavoriteIds(context, favoriteIds.toSet())
+        if (storyId in favoriteIds) {
+            favoriteIds.remove(storyId)
+            saveFavoriteIds(context, favoriteIds.toSet())
+            queueRemoteUnfavorite(context, userStories.firstOrNull { it.id == storyId }?.remoteId)
+        } else {
+            favoriteIds.add(storyId)
+            saveFavoriteIds(context, favoriteIds.toSet())
+            // Favoritar é o momento natural de pedir permissão para avisar de capítulos novos.
+            requestNotificationPermission(false)
+            scheduleNewContentChecks(context)
+            cancelPendingRemovals(context, remoteStoryId = userStories.firstOrNull { it.id == storyId }?.remoteId)
+            requestCloudSync(context) // grava em story_favorites (para o push do servidor)
+        }
     }
     var storyPendingExportId by rememberSaveable { mutableStateOf<String?>(null) }
     var storyPendingExportEditable by rememberSaveable { mutableStateOf(true) }
@@ -210,6 +227,19 @@ fun StoryVerseApp() {
     var viewingAuthorOwnerId by remember { mutableStateOf<String?>(null) }
     var viewingAuthorName by remember { mutableStateOf("") }
     var authorProfileReturnScreen by remember { mutableStateOf(AppScreen.DETAILS) }
+    LaunchedEffect(Unit) {
+        createNotificationChannels(context)
+        scheduleNewContentChecks(context)
+    }
+    LaunchedEffect(authUserId) { saveMyUserIdForNotifications(context, authUserId) }
+    // Logado: registra o aparelho para push e sincroniza favoritas/seguidos com o servidor.
+    // Também roda de novo quando os interruptores de notificação mudam.
+    LaunchedEffect(authUserId, appSettings.notifyFavorites, appSettings.notifyFollowedAuthors) {
+        if (authUserId != null) {
+            syncPushRegistration(context)
+            requestCloudSync(context)
+        }
+    }
     fun openAuthorProfile(ownerId: String?, authorName: String, returnTo: AppScreen) {
         viewingAuthorOwnerId = ownerId
         viewingAuthorName = authorName
@@ -225,7 +255,7 @@ fun StoryVerseApp() {
         onlineBusy = true
         coroutineScope.launch {
             try {
-                val bytes = withContext(Dispatchers.IO) { downloadStoryBytes(remote.filePath) }
+                val bytes = withContext(Dispatchers.IO) { downloadStoryBytesCached(context, remote) }
                 val tmp = java.io.File(context.cacheDir, "online_${remote.id}.lyr")
                 tmp.writeBytes(bytes)
                 val imported = withContext(Dispatchers.IO) {
@@ -258,7 +288,7 @@ fun StoryVerseApp() {
         val tracked = userStories.filter { !it.remoteId.isNullOrBlank() }
         if (tracked.isEmpty()) return@LaunchedEffect
         runCatching {
-            val remoteList = withContext(Dispatchers.IO) { fetchPublicStories(limit = 100) }
+            val remoteList = withContext(Dispatchers.IO) { fetchPublicStoriesCached(context, limit = 100) }
             val notices = mutableListOf<String>()
             tracked.forEach { local ->
                 val remote = remoteList.firstOrNull { it.id == local.remoteId } ?: return@forEach
@@ -306,7 +336,9 @@ fun StoryVerseApp() {
                 var avatarPath = userProfile.avatarPath
                 if (remotePath == null) {
                     if (avatarPath != null) { photoUri = null; avatarPath = null }
-                } else if (remotePath != avatarPath || photoUri == null) {
+                } else if (remotePath != avatarPath || photoUri == null ||
+                    !withContext(Dispatchers.IO) { isImageReadable(context, photoUri!!) }
+                ) {
                     val bytes = withContext(Dispatchers.IO) { downloadAvatarBytes(remotePath) }
                     photoUri = withContext(Dispatchers.IO) { storeAvatarLocally(context, bytes) }
                     avatarPath = remotePath
@@ -316,13 +348,41 @@ fun StoryVerseApp() {
                     nickname = remoteProfile.nickname,
                     username = remoteProfile.username,
                     photoUri = photoUri,
-                    avatarPath = avatarPath
+                    avatarPath = avatarPath,
+                    // Só traz a bio do servidor se este aparelho ainda não tiver nenhuma.
+                    bio = userProfile.bio.ifBlank { remoteProfile.bio }
                 )
                 userProfile = merged
                 saveUserProfile(context, merged)
+                withContext(Dispatchers.IO) { pruneOwnAvatars(context, merged.photoUri) }
             }
         } catch (_: Exception) {
             // Sem rede ou tabelas ainda não criadas: mantém o perfil local.
+        }
+    }
+    // Login e criação de conta compartilham o mesmo fluxo; ao terminar, volta para a tela de perfil.
+    fun runAuth(email: String, password: String, isSignUp: Boolean) {
+        onlineBusy = true
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    if (isSignUp) signUpEmail(email, password) else signInEmail(email, password)
+                }
+                isLoggedIn = currentUserId() != null
+                authEmail = currentUserEmail().orEmpty()
+                authUserId = currentUserId()
+                if (isSignUp && !isLoggedIn) {
+                    accountNotice.value = "Conta criada! Foi enviado um e-mail de confirmação para $email. " +
+                        "Abra o link no próprio celular para voltar ao app já conectado."
+                } else {
+                    saveToast = if (isSignUp) "Conta criada" else "Login feito"
+                }
+                if (isSignUp) currentScreen = AppScreen.PROFILE
+            } catch (e: Exception) {
+                accountNotice.value = e.message ?: if (isSignUp) "Falha ao criar a conta" else "Falha no login"
+            } finally {
+                onlineBusy = false
+            }
         }
     }
     fun saveProfile(draft: UserProfile) {
@@ -338,6 +398,7 @@ fun StoryVerseApp() {
                     val saved = draft.copy(username = "", avatarPath = keepAvatar)
                     userProfile = saved
                     saveUserProfile(context, saved)
+                    withContext(Dispatchers.IO) { pruneOwnAvatars(context, saved.photoUri) }
                     profileStatus = "Perfil salvo neste aparelho." to false
                 } else {
                     val username = draft.username.trim().lowercase()
@@ -384,6 +445,7 @@ fun StoryVerseApp() {
                     val saved = draft.copy(username = username, avatarPath = avatarPath)
                     userProfile = saved
                     saveUserProfile(context, saved)
+                    withContext(Dispatchers.IO) { pruneOwnAvatars(context, saved.photoUri) }
                     profileStatus = "Perfil salvo online." to false
                     saveToast = "Perfil salvo"
                 }
@@ -408,6 +470,7 @@ fun StoryVerseApp() {
         if (story.id in favoriteIds) {
             favoriteIds.remove(story.id)
             saveFavoriteIds(context, favoriteIds.toSet())
+            queueRemoteUnfavorite(context, story.remoteId)
         }
         if (storyStats.remove(story.id) != null) saveStoryStats(context, storyStats.toMap())
         val remaining = userStories.toList()
@@ -545,11 +608,12 @@ fun StoryVerseApp() {
             currentScreen = when (currentScreen) {
                 AppScreen.READER, AppScreen.STATS -> AppScreen.DETAILS
                 AppScreen.EDITOR -> AppScreen.LIBRARY
-                AppScreen.SETTINGS, AppScreen.MANAGE_POSTED -> AppScreen.PROFILE
+                AppScreen.SETTINGS, AppScreen.MANAGE_POSTED, AppScreen.CREATE_ACCOUNT -> AppScreen.PROFILE
                 AppScreen.AUTHOR_PROFILE -> authorProfileReturnScreen
                 AppScreen.SETTINGS_PROFILE,
                 AppScreen.SETTINGS_APPEARANCE,
                 AppScreen.SETTINGS_READER,
+                AppScreen.SETTINGS_NOTIFICATIONS,
                 AppScreen.SETTINGS_CONTENT,
                 AppScreen.SETTINGS_ABOUT -> AppScreen.SETTINGS
                 else -> AppScreen.HOME
@@ -557,13 +621,7 @@ fun StoryVerseApp() {
         }
     }
 
-    val selectedTab = when (currentScreen) {
-        AppScreen.HOME -> 0
-        AppScreen.EXPLORE -> 1
-        AppScreen.LIBRARY -> 2
-        AppScreen.PROFILE -> 3
-        else -> -1
-    }
+    val selectedTab = mainTabIndex(currentScreen)
 
     Scaffold(
         containerColor = Background,
@@ -582,7 +640,7 @@ fun StoryVerseApp() {
                             )
                             Text(
                                 (ch?.title?.takeIf { it.isNotBlank() } ?: "Capítulo ${chapterIndex + 1}"),
-                                color = Color.White,
+                                color = PrimaryText,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -597,9 +655,11 @@ fun StoryVerseApp() {
                                 currentScreen == AppScreen.SETTINGS_PROFILE -> "Editar perfil"
                                 currentScreen == AppScreen.SETTINGS_APPEARANCE -> "Aparência"
                                 currentScreen == AppScreen.SETTINGS_READER -> "Leitor de histórias"
+                                currentScreen == AppScreen.SETTINGS_NOTIFICATIONS -> "Notificações"
                                 currentScreen == AppScreen.SETTINGS_CONTENT -> "Conteúdo e exportação"
                                 currentScreen == AppScreen.SETTINGS_ABOUT -> "Sobre o app"
                                 currentScreen == AppScreen.MANAGE_POSTED -> "Histórias postadas"
+                                currentScreen == AppScreen.CREATE_ACCOUNT -> "Criar conta"
                                 currentScreen == AppScreen.AUTHOR_PROFILE -> "Perfil do autor"
                                 currentScreen == AppScreen.EDITOR && editingChapterIndex != null -> "Editar capítulo"
                                 currentScreen == AppScreen.EDITOR -> "Editor de histórias"
@@ -619,11 +679,12 @@ fun StoryVerseApp() {
                                 currentScreen = when (currentScreen) {
                                     AppScreen.READER, AppScreen.STATS -> AppScreen.DETAILS
                                     AppScreen.EDITOR -> AppScreen.LIBRARY
-                                    AppScreen.SETTINGS, AppScreen.MANAGE_POSTED -> AppScreen.PROFILE
+                                    AppScreen.SETTINGS, AppScreen.MANAGE_POSTED, AppScreen.CREATE_ACCOUNT -> AppScreen.PROFILE
                                     AppScreen.AUTHOR_PROFILE -> authorProfileReturnScreen
                                     AppScreen.SETTINGS_PROFILE,
                                     AppScreen.SETTINGS_APPEARANCE,
                                     AppScreen.SETTINGS_READER,
+                                    AppScreen.SETTINGS_NOTIFICATIONS,
                                     AppScreen.SETTINGS_CONTENT,
                                     AppScreen.SETTINGS_ABOUT -> AppScreen.SETTINGS
                                     else -> AppScreen.HOME
@@ -654,7 +715,7 @@ fun StoryVerseApp() {
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Background,
-                    titleContentColor = Color.White
+                    titleContentColor = PrimaryText
                 )
             )
         },
@@ -663,13 +724,13 @@ fun StoryVerseApp() {
                 FloatingActionButton(
                     onClick = { editingStory = null; editingChapterIndex = null; currentScreen = AppScreen.EDITOR },
                     containerColor = Accent,
-                    contentColor = Color(0xFF17121F)
+                    contentColor = OnAccent
                 ) { Text("+", fontSize = 28.sp) }
             }
         },
         bottomBar = {
             if (isMainScreen) {
-                NavigationBar(containerColor = CardColor, contentColor = Color.White) {
+                NavigationBar(containerColor = CardColor, contentColor = PrimaryText) {
                     val tabs = listOf("Explorar", "Pesquisar", "Biblioteca", "Perfil")
                     val symbols = listOf("꧂", "⌕", "✍", "𖠌")
                     val destinations = listOf(
@@ -687,7 +748,7 @@ fun StoryVerseApp() {
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Accent,
                                 selectedTextColor = Accent,
-                                indicatorColor = Color(0xFF353044),
+                                indicatorColor = Accent.copy(alpha = 0.22f),
                                 unselectedIconColor = SecondaryText,
                                 unselectedTextColor = SecondaryText
                             )
@@ -702,11 +763,43 @@ fun StoryVerseApp() {
                 .fillMaxSize()
                 .padding(padding)
                 .consumeWindowInsets(padding)
+                // Deslizar para os lados nas telas iniciais troca de aba (esquerda = próxima, direita = anterior).
+                .then(
+                    if (isMainScreen) Modifier.pointerInput(selectedTab) {
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onDragCancel = { total = 0f },
+                            onDragEnd = {
+                                val threshold = 72.dp.toPx()
+                                val target = when {
+                                    total <= -threshold -> selectedTab + 1
+                                    total >= threshold -> selectedTab - 1
+                                    else -> selectedTab
+                                }
+                                if (target != selectedTab && target in MAIN_TAB_SCREENS.indices) {
+                                    currentScreen = MAIN_TAB_SCREENS[target]
+                                }
+                                total = 0f
+                            },
+                            onHorizontalDrag = { _, dragAmount -> total += dragAmount }
+                        )
+                    } else Modifier
+                )
         ) {
             AnimatedContent(
                 targetState = currentScreen,
                 transitionSpec = {
-                    (fadeIn() + slideInHorizontally { it / 8 }) togetherWith (fadeOut() + slideOutHorizontally { -it / 8 })
+                    val from = mainTabIndex(initialState)
+                    val to = mainTabIndex(targetState)
+                    if (from >= 0 && to >= 0 && from != to) {
+                        // Entre abas: a nova tela entra do lado para onde a pessoa deslizou.
+                        val dir = if (to > from) 1 else -1
+                        (fadeIn() + slideInHorizontally { dir * it / 3 }) togetherWith
+                            (fadeOut() + slideOutHorizontally { -dir * it / 3 })
+                    } else {
+                        (fadeIn() + slideInHorizontally { it / 8 }) togetherWith (fadeOut() + slideOutHorizontally { -it / 8 })
+                    }
                 },
                 label = "screenTransition"
             ) { screen ->
@@ -754,32 +847,11 @@ fun StoryVerseApp() {
                     writtenCount = userStories.count { it.editable },
                     favoriteCount = favoriteIds.size,
                     onOpenSettings = { currentScreen = AppScreen.SETTINGS },
-                    onLogin = { email, password, isSignUp ->
-                        onlineBusy = true
-                        coroutineScope.launch {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    if (isSignUp) signUpEmail(email, password) else signInEmail(email, password)
-                                }
-                                isLoggedIn = currentUserId() != null
-                                authEmail = currentUserEmail().orEmpty()
-                                authUserId = currentUserId()
-                                if (isSignUp && !isLoggedIn) {
-                                    accountNotice.value = "Conta criada! Foi enviado um e-mail de confirmação para $email. " +
-                                        "Abra o link no próprio celular para voltar ao app já conectado."
-                                } else {
-                                    saveToast = if (isSignUp) "Conta criada" else "Login feito"
-                                }
-                            } catch (e: Exception) {
-                                accountNotice.value = e.message ?: "Falha no login"
-                            } finally {
-                                onlineBusy = false
-                            }
-                        }
-                    },
+                    onLogin = { email, password -> runAuth(email, password, isSignUp = false) },
+                    onCreateAccount = { currentScreen = AppScreen.CREATE_ACCOUNT },
                     onLogout = {
                         coroutineScope.launch {
-                            runCatching { withContext(Dispatchers.IO) { signOut() } }
+                            runCatching { withContext(Dispatchers.IO) { runCatching { unregisterPushToken(context) }; signOut() } }
                             isLoggedIn = false
                             authEmail = ""
                             authUserId = null
@@ -790,6 +862,11 @@ fun StoryVerseApp() {
                     },
                     authBusy = onlineBusy,
                     onManagePosted = { currentScreen = AppScreen.MANAGE_POSTED }
+                )
+                AppScreen.CREATE_ACCOUNT -> CreateAccountScreen(
+                    authBusy = onlineBusy,
+                    onCreateAccount = { email, password -> runAuth(email, password, isSignUp = true) },
+                    onHaveAccount = { currentScreen = AppScreen.PROFILE }
                 )
                 AppScreen.MANAGE_POSTED -> ManagePostedScreen(
                     isLoggedIn = isLoggedIn,
@@ -818,7 +895,7 @@ fun StoryVerseApp() {
                     settings = appSettings,
                     onSettingsChange = { updated ->
                         appSettings = updated
-                        appThemeState.value = themeColorsFor(updated.themeId)
+                        appThemeState.value = themeColorsFor(updated)
                         saveAppSettings(context, updated)
                     }
                 )
@@ -828,6 +905,13 @@ fun StoryVerseApp() {
                         appSettings = updated
                         saveAppSettings(context, updated)
                         fontSize = updated.defaultReaderFontSize
+                    }
+                )
+                AppScreen.SETTINGS_NOTIFICATIONS -> SettingsNotificationsScreen(
+                    settings = appSettings,
+                    onSettingsChange = { updated ->
+                        appSettings = updated
+                        saveAppSettings(context, updated)
                     }
                 )
                 AppScreen.SETTINGS_CONTENT -> SettingsContentScreen(
@@ -1146,7 +1230,7 @@ fun StoryVerseApp() {
                 TextButton(onClick = { updateNotices = emptyList() }) { Text("OK", color = Accent) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -1192,7 +1276,7 @@ fun StoryVerseApp() {
                 }) { Text("Somente leitura", color = SecondaryText) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -1209,14 +1293,14 @@ fun StoryVerseApp() {
             },
             confirmButton = {
                 TextButton(onClick = { deleteStoryFromLibrary(target) }) {
-                    Text("Excluir", color = Color(0xFFFF8B9A))
+                    Text("Excluir", color = DangerColor)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { storyPendingDelete = null }) { Text("Cancelar", color = SecondaryText) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -1271,7 +1355,7 @@ fun StoryVerseApp() {
             text = { Text(notice) },
             confirmButton = { TextButton(onClick = { accountNotice.value = null }) { Text("OK") } },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -1282,7 +1366,7 @@ fun StoryVerseApp() {
             text = { Text(transferMessage ?: "") },
             confirmButton = { TextButton(onClick = { transferMessage = null }) { Text("OK") } },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -1298,14 +1382,14 @@ fun StoryVerseApp() {
             contentAlignment = Alignment.BottomCenter
         ) {
             Surface(
-                color = Color(0xFF2A2438),
+                color = SurfaceAlt,
                 shape = RoundedCornerShape(50),
                 shadowElevation = 6.dp
             ) {
                 Text(
                     saveToast ?: "",
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                    color = Color(0xFF9DE0B8),
+                    color = SuccessColor,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                 )

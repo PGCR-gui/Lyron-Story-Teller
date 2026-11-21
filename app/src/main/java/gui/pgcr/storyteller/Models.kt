@@ -262,23 +262,36 @@ internal data class UserProfile(
 }
 
 internal data class AppSettings(
-    /** dark | amethyst | night_blue | soft_light */
+    /** dark | amethyst | night_blue | soft_light | amethyst_light | tangerina | ambar | floresta | piscina | pergaminho | meia_noite | carmim | musgo | custom_dark | custom_light */
     val themeId: String = "dark",
+    /** Fundo preto puro nos temas escuros. */
+    val amoled: Boolean = false,
+    /** Temas personalizados (ARGB): primária = destaque, secundária = fundo, terciária = textos secundários. */
+    val customDarkPrimary: Long = 0xFFB69CFF,
+    val customDarkSecondary: Long = 0xFF101014,
+    val customDarkTertiary: Long = 0xFFAAA7B5,
+    val customLightPrimary: Long = 0xFF6B4EFF,
+    val customLightSecondary: Long = 0xFFF4F1EA,
+    val customLightTertiary: Long = 0xFF6A6475,
     val defaultReaderFontSize: Float = 18f,
     val showSampleStories: Boolean = false,
     val confirmBeforeExport: Boolean = true,
-    /** soft_light | sepia | dark_obsidian | amethyst_night */
+    /** soft_light | sepia | dark_obsidian | amethyst_night | dawn_mist | forest_night */
     val readerThemeId: String = "amethyst_night",
     /** continuous | paginated */
     val readerMode: String = "continuous",
-    /** system | serif | sans | mono | custom path */
+    /** system | serif | sans | mono | id de fonte embutida | custom:<arquivo> (fonte .ttf/.otf carregada) */
     val readerFontFamily: String = "system",
     val appFontFamily: String = "system",
     val loadCustomFonts: Boolean = true,
     /** Multiplicador de espaçamento entre linhas (1.0 = apertado, 1.8 = folgado) */
     val readerLineHeight: Float = 1.55f,
     /** Margem horizontal da página em dp */
-    val readerMarginDp: Float = 20f
+    val readerMarginDp: Float = 20f,
+    /** Avisar quando uma história favoritada (baixada) recebe capítulos novos. */
+    val notifyFavorites: Boolean = true,
+    /** Avisar quando um autor seguido publica uma história ou capítulo novo. */
+    val notifyFollowedAuthors: Boolean = true
 )
 
 internal val STORY_GENRES = listOf(
@@ -314,8 +327,8 @@ internal val sampleStories = emptyList<Story>()
 
 internal enum class AppScreen {
     HOME, EXPLORE, LIBRARY, PROFILE, SETTINGS,
-    SETTINGS_PROFILE, SETTINGS_APPEARANCE, SETTINGS_READER, SETTINGS_CONTENT, SETTINGS_ABOUT,
-    DETAILS, STATS, READER, EDITOR, MANAGE_POSTED, AUTHOR_PROFILE
+    SETTINGS_PROFILE, SETTINGS_APPEARANCE, SETTINGS_READER, SETTINGS_NOTIFICATIONS, SETTINGS_CONTENT, SETTINGS_ABOUT,
+    DETAILS, STATS, READER, EDITOR, MANAGE_POSTED, AUTHOR_PROFILE, CREATE_ACCOUNT
 }
 
 internal data class StoryStats(

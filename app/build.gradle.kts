@@ -9,6 +9,11 @@ plugins {
     kotlin("plugin.serialization") version "2.3.21"
 }
 
+// Push (Firebase): aplica o plugin só quando o arquivo existe (veja push_setup/PASSO_A_PASSO.md)
+if (rootProject.file("app/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 val keystorePropsFile = rootProject.file("release.properties")
 val keystoreProps = Properties()
 
@@ -51,8 +56,8 @@ android {
         applicationId = "gui.pgcr.storyteller"  
         minSdk = 26  
         targetSdk = 37
-        versionCode = 5
-        versionName = "0.05"
+        versionCode = 8
+        versionName = "0.08"
         
         vectorDrawables { 
             useSupportLibrary = true
@@ -170,4 +175,11 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:storage-kt")
     implementation("io.ktor:ktor-client-android:3.2.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+
+    // Verificação periódica de capítulos novos (notificações)
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+
+    // Push (Firebase Cloud Messaging)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }

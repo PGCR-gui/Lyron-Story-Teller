@@ -129,14 +129,14 @@ internal fun ProfileScreen(
     writtenCount: Int,
     favoriteCount: Int,
     onOpenSettings: () -> Unit,
-    onLogin: (email: String, password: String, isSignUp: Boolean) -> Unit,
+    onLogin: (email: String, password: String) -> Unit,
+    onCreateAccount: () -> Unit,
     onLogout: () -> Unit,
     authBusy: Boolean,
     onManagePosted: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -149,7 +149,7 @@ internal fun ProfileScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (!isLoggedIn) {
-            Text("Conta Lyron", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Conta Lyron", color = PrimaryText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text(
                 "Entre para publicar histórias online e sincronizar seu catálogo.",
                 color = SecondaryText,
@@ -171,27 +171,26 @@ internal fun ProfileScreen(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation()
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Switch(
-                    checked = isSignUp,
-                    onCheckedChange = { isSignUp = it },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Accent)
-                )
-                Text(if (isSignUp) "Criar nova conta" else "Já tenho conta", color = SecondaryText)
-            }
             Button(
-                onClick = { onLogin(email.trim(), password, isSignUp) },
+                onClick = { onLogin(email.trim(), password) },
                 enabled = !authBusy && email.contains("@") && password.length >= 6,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F)),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (authBusy) "Aguarde…" else if (isSignUp) "Criar conta" else "Entrar")
+                Text(if (authBusy) "Aguarde…" else "Entrar")
+            }
+            OutlinedButton(
+                onClick = onCreateAccount,
+                enabled = !authBusy,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Não tenho conta", color = Accent)
             }
             HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f), modifier = Modifier.padding(vertical = 8.dp))
         } else {
             Text("Logado como", color = SecondaryText, fontSize = 12.sp)
             Text(authEmail.ifBlank { "conta online" }, color = Accent, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onLogout) { Text("Sair da conta", color = Color(0xFFFF8B9A)) }
+            TextButton(onClick = onLogout) { Text("Sair da conta", color = DangerColor) }
             HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
         }
 
@@ -199,7 +198,7 @@ internal fun ProfileScreen(
             modifier = Modifier
                 .size(108.dp)
                 .clip(RoundedCornerShape(50))
-                .background(Color(0xFF302744), RoundedCornerShape(50))
+                .background(SurfaceAlt, RoundedCornerShape(50))
                 .clickable { onOpenSettings() },
             contentAlignment = Alignment.Center
         ) {
@@ -214,7 +213,7 @@ internal fun ProfileScreen(
                 )
             }
         }
-        Text(profile.authorName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(profile.authorName, color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         if (profile.username.isNotBlank()) {
             Text("@${profile.username}", color = Accent, fontSize = 15.sp)
         } else if (isLoggedIn) {
@@ -235,13 +234,13 @@ internal fun ProfileScreen(
             Card(colors = CardDefaults.cardColors(containerColor = CardColor), shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Escritas", color = SecondaryText, fontSize = 12.sp)
-                    Text("$writtenCount", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("$writtenCount", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = CardColor), shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Favoritas", color = SecondaryText, fontSize = 12.sp)
-                    Text("$favoriteCount", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("$favoriteCount", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -321,7 +320,7 @@ internal fun ManagePostedScreen(
                             }
                         }
                     }
-                ) { Text(if (unpublishing) "Removendo…" else "Remover", color = Color(0xFFFF8B9A)) }
+                ) { Text(if (unpublishing) "Removendo…" else "Remover", color = DangerColor) }
             },
             dismissButton = {
                 TextButton(onClick = { pendingUnpublish = null }, enabled = !unpublishing) {
@@ -329,7 +328,7 @@ internal fun ManagePostedScreen(
                 }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -340,7 +339,7 @@ internal fun ManagePostedScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Histórias postadas", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Histórias postadas", color = PrimaryText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text(
                 "Gerencie as histórias que você publicou no catálogo online.",
                 color = SecondaryText,
@@ -352,7 +351,7 @@ internal fun ManagePostedScreen(
         }
         when {
             loading -> item { Text("Carregando…", color = SecondaryText) }
-            error != null -> item { Text(error!!, color = Color(0xFFFF8B9A)) }
+            error != null -> item { Text(error!!, color = DangerColor) }
             stories.isEmpty() -> item {
                 Text(
                     "Você ainda não publicou nenhuma história online, ou todas já foram removidas.",
@@ -370,7 +369,7 @@ internal fun ManagePostedScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(remote.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(remote.title, color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                         Text(remote.author, color = SecondaryText, fontSize = 13.sp)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -399,7 +398,7 @@ internal fun ManagePostedScreen(
                             enabled = !busy && !unpublishing,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Remover do catálogo online", color = Color(0xFFFF8B9A))
+                            Text("Remover do catálogo online", color = DangerColor)
                         }
                     }
                 }

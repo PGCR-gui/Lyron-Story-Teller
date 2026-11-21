@@ -146,9 +146,9 @@ internal fun StoryDetailsScreen(
     val isChoiceStory = story.isChoiceStory
     var synopsisExpanded by remember(story.id) { mutableStateOf(false) }
     val statusColor = when (story.status) {
-        STATUS_COMPLETE -> Color(0xFF9DE0B8)
-        STATUS_CANCELLED -> Color(0xFFFF8B9A)
-        else -> Color(0xFF8BB8FF)
+        STATUS_COMPLETE -> SuccessColor
+        STATUS_CANCELLED -> DangerColor
+        else -> InfoColor
     }
     val currentEndingKeys = buildSet {
         story.chapters.filter { it.isEnding }.forEach { add("chapter:${it.id}") }
@@ -183,7 +183,7 @@ internal fun StoryDetailsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF302744), RoundedCornerShape(20.dp)),
+                    .background(SurfaceAlt, RoundedCornerShape(20.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (story.coverImageUri != null) {
@@ -232,7 +232,7 @@ internal fun StoryDetailsScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
-            Text(story.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text(story.title, color = PrimaryText, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             if (onAuthorClick != null && story.author.isNotBlank()) {
                 Text(
                     "por ${story.author}",
@@ -246,7 +246,7 @@ internal fun StoryDetailsScreen(
                 Text("por ${story.author}", color = SecondaryText, fontSize = 14.sp)
             }
             if (!story.editable) {
-                Text("Somente leitura", color = Color(0xFFFFD18A), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text("Somente leitura", color = WarnColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
         }
         item {
@@ -276,7 +276,7 @@ internal fun StoryDetailsScreen(
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     if (story.classifications.isNotEmpty()) {
-                        Text("Tipo", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Tipo", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(6.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -288,7 +288,7 @@ internal fun StoryDetailsScreen(
                     }
                     if (story.tags.isNotEmpty()) {
                         if (story.classifications.isNotEmpty()) Spacer(Modifier.height(12.dp))
-                        Text("Tags", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Tags", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -307,7 +307,7 @@ internal fun StoryDetailsScreen(
             }
         }
         item {
-            Text("Sinopse", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Sinopse", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             if (story.description.isBlank()) {
                 Text("Sem sinopse.", color = SecondaryText, fontSize = 15.sp)
             } else {
@@ -336,7 +336,7 @@ internal fun StoryDetailsScreen(
             }
         }
         item {
-            Text("Classificação indicativa", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Classificação indicativa", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -352,7 +352,7 @@ internal fun StoryDetailsScreen(
             val warnings = story.contentWarnings.ifBlank { defaultContentWarningFor(story.rating) }
             if (warnings.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                Text("Avisos de conteúdo", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Avisos de conteúdo", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(warnings, color = SecondaryText, fontSize = 14.sp, lineHeight = 21.sp)
             }
         }
@@ -361,7 +361,7 @@ internal fun StoryDetailsScreen(
                 Button(
                     onClick = onContinueClick,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F))
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
                 ) {
                     Text("Continuar de onde parou")
                 }
@@ -370,16 +370,16 @@ internal fun StoryDetailsScreen(
                         Text("Recomeçar do início", color = Accent)
                     }
                     OutlinedButton(onClick = onFavoriteClick, modifier = Modifier.weight(1f)) {
-                        Text(if (isFavorite) "★ Favorita" else "☆ Favoritar", color = if (isFavorite) Color(0xFFFFD18A) else Accent)
+                        Text(if (isFavorite) "★ Favorita" else "☆ Favoritar", color = if (isFavorite) WarnColor else Accent)
                     }
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onReadClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F))) {
+                    Button(onClick = onReadClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                         Text("Começar leitura")
                     }
                     OutlinedButton(onClick = onFavoriteClick, modifier = Modifier.weight(1f)) {
-                        Text(if (isFavorite) "★ Favorita" else "☆ Favoritar", color = if (isFavorite) Color(0xFFFFD18A) else Accent)
+                        Text(if (isFavorite) "★ Favorita" else "☆ Favoritar", color = if (isFavorite) WarnColor else Accent)
                     }
                 }
             }
@@ -395,7 +395,7 @@ internal fun StoryDetailsScreen(
                 Button(
                     onClick = onPublishOnline,
                     enabled = !transferBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (transferBusy) "Publicando…" else "Publicar online (somente leitura)")
@@ -408,12 +408,12 @@ internal fun StoryDetailsScreen(
             }
             if (canDelete) {
                 OutlinedButton(onClick = onDeleteClick, modifier = Modifier.fillMaxWidth()) {
-                    Text("Excluir da biblioteca", color = Color(0xFFFF8B9A))
+                    Text("Excluir da biblioteca", color = DangerColor)
                 }
             }
         }
         if (!isChoiceStory) {
-            item { Text("Capítulos", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+            item { Text("Capítulos", color = PrimaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
             items(story.chapters.size) { index ->
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable { onChapterClick(index) },
@@ -422,7 +422,7 @@ internal fun StoryDetailsScreen(
                 ) {
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(story.chapters[index].title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(story.chapters[index].title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
                             Text("Capítulo ${index + 1}", color = SecondaryText, fontSize = 12.sp)
                         }
                         Text("›", color = Accent, fontSize = 28.sp)
@@ -495,7 +495,7 @@ internal fun StoryStatsScreen(story: Story, stats: StoryStats) {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text(story.title, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(story.title, color = PrimaryText, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text("Estatísticas de leitura", color = SecondaryText, fontSize = 14.sp)
         }
         item {
@@ -517,7 +517,7 @@ internal fun StoryStatsScreen(story: Story, stats: StoryStats) {
             }
         }
         item {
-            Text("Finais definidos na história", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text("Finais definidos na história", color = PrimaryText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Text("$completedEndingVisits finalizações registradas", color = SecondaryText, fontSize = 12.sp)
         }
         if (availableEndings.isEmpty()) {
@@ -529,8 +529,8 @@ internal fun StoryStatsScreen(story: Story, stats: StoryStats) {
                 Card(colors = CardDefaults.cardColors(containerColor = CardColor), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(label, color = Color.White, fontSize = 13.sp)
-                            Text(if (visits > 0) "Alcançado $visits vezes" else "Ainda não alcançado", color = if (visits > 0) Color(0xFF9DE0B8) else SecondaryText, fontSize = 11.sp)
+                            Text(label, color = PrimaryText, fontSize = 13.sp)
+                            Text(if (visits > 0) "Alcançado $visits vezes" else "Ainda não alcançado", color = if (visits > 0) SuccessColor else SecondaryText, fontSize = 11.sp)
                         }
                         Text("$visits", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
@@ -538,7 +538,7 @@ internal fun StoryStatsScreen(story: Story, stats: StoryStats) {
             }
         }
         item {
-            Text("Caminhos percorridos", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text("Caminhos percorridos", color = PrimaryText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Text("As transições registradas durante as leituras desta história.", color = SecondaryText, fontSize = 12.sp)
         }
         val traversed = paths.filter { (key, _) -> (stats.pathTraversals[key] ?: 0) > 0 }
@@ -551,7 +551,7 @@ internal fun StoryStatsScreen(story: Story, stats: StoryStats) {
                 val count = stats.pathTraversals[key] ?: 0
                 Card(colors = CardDefaults.cardColors(containerColor = CardColor), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(label, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.weight(1f))
                         Text("$count×", color = Accent, fontWeight = FontWeight.Bold)
                     }
                 }

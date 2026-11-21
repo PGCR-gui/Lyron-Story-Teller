@@ -403,7 +403,7 @@ internal fun RichChapterEditor(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text(chapter.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(chapter.title, color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     ChapterBodyContent(chapter, 17f)
                 }
             } else {
@@ -535,7 +535,7 @@ internal fun RichChapterEditor(
                 TextButton(onClick = { showFind = false }) { Text("Cancelar", color = SecondaryText) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -566,7 +566,7 @@ internal fun ChapterTextSegment(
             .focusRequester(focusRequester)
             .onFocusChanged { if (it.isFocused) onFocus() },
         textStyle = androidx.compose.ui.text.TextStyle(
-            color = Color(0xFFEDEAF3), fontSize = 17.sp, lineHeight = 27.sp
+            color = PrimaryText, fontSize = 17.sp, lineHeight = 27.sp
         ),
         cursorBrush = SolidColor(Accent),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -590,7 +590,7 @@ internal fun InlineImageCard(
     onRemove: () -> Unit
 ) {
     Surface(
-        color = Color.White.copy(alpha = 0.07f),
+        color = PrimaryText.copy(alpha = 0.07f),
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
     ) {
@@ -608,14 +608,14 @@ internal fun InlineImageCard(
                         .size(22.dp)
                         .background(Color(0xCC1B1626), RoundedCornerShape(6.dp)),
                     contentAlignment = Alignment.Center
-                ) { Text("✎", color = Color.White, fontSize = 12.sp) }
+                ) { Text("✎", color = PrimaryText, fontSize = 12.sp) }
             }
             BasicTextField(
                 value = image.caption,
                 onValueChange = onCaptionChange,
                 modifier = Modifier.weight(1f),
                 maxLines = 3,
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFEDEAF3), fontSize = 14.sp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = PrimaryText, fontSize = 14.sp),
                 cursorBrush = SolidColor(Accent),
                 decorationBox = { inner ->
                     Box {
@@ -633,7 +633,7 @@ internal fun InlineImageCard(
                     .clickable { onRemove() }
                     .padding(6.dp),
                 contentAlignment = Alignment.Center
-            ) { Text("🗑", color = Color(0xFFEDE7FA), fontSize = 16.sp) }
+            ) { Text("🗑", color = PrimaryText, fontSize = 16.sp) }
         }
     }
 }
@@ -715,7 +715,7 @@ internal fun ChapterFormatBar(
     onSearch: () -> Unit,
     onTogglePreview: () -> Unit
 ) {
-    val ink = Color(0xFFEDE7FA)
+    val ink = PrimaryText
     val editing = !previewMode
     var styleMenu by remember { mutableStateOf(false) }
     var alignMenu by remember { mutableStateOf(false) }

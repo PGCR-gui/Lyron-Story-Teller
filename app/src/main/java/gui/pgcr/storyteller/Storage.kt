@@ -394,8 +394,15 @@ internal fun loadAppSettings(context: Context): AppSettings {
     return runCatching {
         val json = JSONObject(raw)
         AppSettings(
-            themeId = json.optString("themeId", "dark"),
-            defaultReaderFontSize = json.optDouble("defaultReaderFontSize", 18.0).toFloat().coerceIn(14f, 28f),
+            themeId = json.optString("themeId", "dark").let { if (it == "night_blue_light") "soft_light" else it },
+            amoled = json.optBoolean("amoled", false),
+            customDarkPrimary = json.optLong("customDarkPrimary", 0xFFB69CFF),
+            customDarkSecondary = json.optLong("customDarkSecondary", 0xFF101014),
+            customDarkTertiary = json.optLong("customDarkTertiary", 0xFFAAA7B5),
+            customLightPrimary = json.optLong("customLightPrimary", 0xFF6B4EFF),
+            customLightSecondary = json.optLong("customLightSecondary", 0xFFF4F1EA),
+            customLightTertiary = json.optLong("customLightTertiary", 0xFF6A6475),
+            defaultReaderFontSize = json.optDouble("defaultReaderFontSize", 18.0).toFloat().coerceIn(8f, 32f),
             showSampleStories = json.optBoolean("showSampleStories", false),
             confirmBeforeExport = json.optBoolean("confirmBeforeExport", true),
             readerThemeId = json.optString("readerThemeId", "amethyst_night"),
@@ -404,7 +411,9 @@ internal fun loadAppSettings(context: Context): AppSettings {
             appFontFamily = json.optString("appFontFamily", "system"),
             loadCustomFonts = json.optBoolean("loadCustomFonts", true),
             readerLineHeight = json.optDouble("readerLineHeight", 1.55).toFloat().coerceIn(1.2f, 2.2f),
-            readerMarginDp = json.optDouble("readerMarginDp", 20.0).toFloat().coerceIn(8f, 48f)
+            readerMarginDp = json.optDouble("readerMarginDp", 20.0).toFloat().coerceIn(8f, 48f),
+            notifyFavorites = json.optBoolean("notifyFavorites", true),
+            notifyFollowedAuthors = json.optBoolean("notifyFollowedAuthors", true)
         )
     }.getOrDefault(AppSettings())
 }
@@ -412,6 +421,13 @@ internal fun loadAppSettings(context: Context): AppSettings {
 internal fun saveAppSettings(context: Context, settings: AppSettings) {
     val json = JSONObject()
         .put("themeId", settings.themeId)
+        .put("amoled", settings.amoled)
+        .put("customDarkPrimary", settings.customDarkPrimary)
+        .put("customDarkSecondary", settings.customDarkSecondary)
+        .put("customDarkTertiary", settings.customDarkTertiary)
+        .put("customLightPrimary", settings.customLightPrimary)
+        .put("customLightSecondary", settings.customLightSecondary)
+        .put("customLightTertiary", settings.customLightTertiary)
         .put("defaultReaderFontSize", settings.defaultReaderFontSize.toDouble())
         .put("showSampleStories", settings.showSampleStories)
         .put("confirmBeforeExport", settings.confirmBeforeExport)
@@ -422,6 +438,8 @@ internal fun saveAppSettings(context: Context, settings: AppSettings) {
         .put("loadCustomFonts", settings.loadCustomFonts)
         .put("readerLineHeight", settings.readerLineHeight.toDouble())
         .put("readerMarginDp", settings.readerMarginDp.toDouble())
+        .put("notifyFavorites", settings.notifyFavorites)
+        .put("notifyFollowedAuthors", settings.notifyFollowedAuthors)
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit().putString(APP_SETTINGS_KEY, json.toString()).apply()
 }

@@ -168,7 +168,7 @@ internal fun LyrPasswordDialog(
                 }
                 val shownError = errorMessage ?: localError
                 if (shownError != null) {
-                    Text(shownError, color = Color(0xFFFF8B9A), fontSize = 13.sp)
+                    Text(shownError, color = DangerColor, fontSize = 13.sp)
                 }
             }
         },
@@ -182,7 +182,7 @@ internal fun LyrPasswordDialog(
             TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancelar", color = SecondaryText) }
         },
         containerColor = CardColor,
-        titleContentColor = Color.White,
+        titleContentColor = PrimaryText,
         textContentColor = SecondaryText
     )
 }
@@ -222,7 +222,7 @@ internal fun EmptyState(title: String, description: String, icon: String) {
     ) {
         Text(icon, color = Accent, fontSize = 54.sp)
         Spacer(modifier = Modifier.height(14.dp))
-        Text(title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(title, color = PrimaryText, fontSize = 21.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text(description, color = SecondaryText, fontSize = 14.sp, textAlign = TextAlign.Center)
     }
 }

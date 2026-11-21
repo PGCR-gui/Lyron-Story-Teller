@@ -210,14 +210,14 @@ internal fun ChapterEditorScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDone, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    Text("←", color = Color.White, fontSize = 22.sp)
+                    Text("←", color = PrimaryText, fontSize = 22.sp)
                 }
                 Column(
                     modifier = Modifier.weight(1f).clickable { showSettings = true }.padding(vertical = 2.dp)
                 ) {
                     Text(
                         chapter.title.ifBlank { "Capítulo sem título" },
-                        color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        color = PrimaryText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     Text(
@@ -235,7 +235,7 @@ internal fun ChapterEditorScreen(
                             .padding(horizontal = 10.dp, vertical = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("⋯", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("⋯", color = PrimaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         Text("Opções", color = SecondaryText, fontSize = 10.sp)
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
@@ -279,7 +279,7 @@ internal fun ChapterEditorScreen(
         )
         if (errorText.isNotBlank()) {
             Text(
-                errorText, color = Color(0xFFFF8B9A), fontSize = 12.sp,
+                errorText, color = DangerColor, fontSize = 12.sp,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
             )
         }
@@ -317,7 +317,7 @@ internal fun ChapterEditorScreen(
                     .padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text("Configurações do capítulo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Configurações do capítulo", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = chapter.title,
                     onValueChange = { change(chapter.copy(title = it)) },
@@ -325,7 +325,7 @@ internal fun ChapterEditorScreen(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Final alternativo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Final alternativo", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                         Text("Este capítulo encerra um dos caminhos da história.", color = SecondaryText, fontSize = 11.sp)
                     }
                     Switch(
@@ -338,7 +338,7 @@ internal fun ChapterEditorScreen(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Rascunho", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Rascunho", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                         Text("Capítulos em rascunho não entram na leitura pública.", color = SecondaryText, fontSize = 12.sp)
                     }
                     Switch(
@@ -355,10 +355,10 @@ internal fun ChapterEditorScreen(
                         placeholder = "Ex.: Você chegou a um desfecho desta história.",
                         minLines = 3
                     )
-                    Text("Este final não possui escolhas de saída. Desative o final para voltar a adicionar escolhas.", color = Color(0xFF9DE0B8), fontSize = 12.sp)
+                    Text("Este final não possui escolhas de saída. Desative o final para voltar a adicionar escolhas.", color = SuccessColor, fontSize = 12.sp)
                 } else {
                     HorizontalDivider(color = SecondaryText.copy(alpha = 0.2f))
-                    Text("Escolhas deste capítulo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Escolhas deste capítulo", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                     chapter.choices.forEachIndexed { choiceIndex, choice ->
                         ChoiceEditor(
                             choice = choice,
@@ -391,7 +391,7 @@ internal fun ChapterEditorScreen(
                     confirmEnding = false
                 }) { Text("Marcar como final") }
             },
-            containerColor = CardColor, titleContentColor = Color.White, textContentColor = SecondaryText
+            containerColor = CardColor, titleContentColor = PrimaryText, textContentColor = SecondaryText
         )
     }
 }
@@ -421,7 +421,7 @@ internal fun StoryPathMapDialog(
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth().clickable { onChapterClick(index) },
-                            colors = CardDefaults.cardColors(containerColor = if (index == 0) Color(0xFF302746) else CardColor),
+                            colors = CardDefaults.cardColors(containerColor = if (index == 0) SurfaceAlt else CardColor),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -432,16 +432,16 @@ internal fun StoryPathMapDialog(
                                             index == 0 -> "INÍCIO"
                                             else -> "CAPÍTULO ${index + 1}"
                                         },
-                                        color = if (chapter.isEnding) Color(0xFF9DE0B8) else Accent,
+                                        color = if (chapter.isEnding) SuccessColor else Accent,
                                         fontWeight = FontWeight.Bold, fontSize = 10.sp,
                                         modifier = Modifier.weight(1f)
                                     )
                                     if (index == 0 && chapter.isEnding) Text("INÍCIO", color = Accent, fontSize = 10.sp)
                                     Text("ABRIR ›", color = SecondaryText, fontSize = 10.sp)
                                 }
-                                Text(chapter.title.ifBlank { "Capítulo ${index + 1}" }, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text(chapter.title.ifBlank { "Capítulo ${index + 1}" }, color = PrimaryText, fontWeight = FontWeight.SemiBold)
                                 if (chapter.isEnding) {
-                                    Text("Este nó encerra um caminho da história.", color = Color(0xFF9DE0B8), fontSize = 11.sp)
+                                    Text("Este nó encerra um caminho da história.", color = SuccessColor, fontSize = 11.sp)
                                 } else if (chapter.choices.isEmpty()) {
                                     Text("Sem escolhas de saída", color = SecondaryText, fontSize = 11.sp)
                                 }
@@ -460,14 +460,14 @@ internal fun StoryPathMapDialog(
                                     Text("↳", color = Accent, fontSize = 18.sp)
                                     Spacer(Modifier.width(8.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(edge.text.ifBlank { "Escolha sem texto" }, color = Color.White, fontSize = 12.sp)
+                                        Text(edge.text.ifBlank { "Escolha sem texto" }, color = PrimaryText, fontSize = 12.sp)
                                         Text(
                                             when {
                                                 edge.endsStory -> "◇ FINAL DIRETO"
                                                 target != null -> "↓ ${target.title} · tocar para navegar"
                                                 else -> "⚠ DESTINO NÃO DEFINIDO"
                                             },
-                                            color = if (edge.endsStory) Color(0xFF9DE0B8) else SecondaryText,
+                                            color = if (edge.endsStory) SuccessColor else SecondaryText,
                                             fontSize = 10.sp
                                         )
                                     }
@@ -483,7 +483,7 @@ internal fun StoryPathMapDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        containerColor = CardColor, titleContentColor = Color.White, textContentColor = Color.White
+        containerColor = CardColor, titleContentColor = PrimaryText, textContentColor = PrimaryText
     )
 }
 
@@ -517,13 +517,13 @@ internal fun ChoiceEditor(
                 }
                 HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("Encerrar a história", color = Color(0xFF9DE0B8)) },
+                    text = { Text("Encerrar a história", color = SuccessColor) },
                     onClick = { onChange(choice.copy(nextChapterId = null, endsStory = true)); menuExpanded = false }
                 )
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onDelete) { Text("Remover escolha", color = Color(0xFFFF8B9A)) }
+            TextButton(onClick = onDelete) { Text("Remover escolha", color = DangerColor) }
         }
     }
 }

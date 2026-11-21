@@ -131,6 +131,7 @@ internal fun OnlineExploreScreen(
     onMessage: (String) -> Unit,
     onAuthorClick: (ownerId: String?, authorName: String) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingUnpublish by remember { mutableStateOf<RemoteStory?>(null) }
     var unpublishing by remember { mutableStateOf(false) }
@@ -140,10 +141,19 @@ internal fun OnlineExploreScreen(
     var refreshTick by remember { mutableStateOf(0) }
 
     LaunchedEffect(refreshTick) {
-        loading = true
+        // Mostra na hora o catálogo salvo (se houver) enquanto a versão nova carrega.
+        val cached = if (stories.isEmpty()) withContext(Dispatchers.IO) { loadCatalogCache(context) } else null
+        if (cached != null && cached.isNotEmpty()) {
+            stories = cached.take(40)
+            loading = false
+        } else {
+            loading = true
+        }
         error = null
         try {
-            stories = withContext(Dispatchers.IO) { fetchPublicStories() }
+            stories = withContext(Dispatchers.IO) { fetchPublicStoriesCached(context) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.message ?: "Não foi possível carregar o catálogo online."
             stories = emptyList()
@@ -181,7 +191,7 @@ internal fun OnlineExploreScreen(
                             }
                         }
                     }
-                ) { Text(if (unpublishing) "Aguarde…" else "Remover", color = Color(0xFFFF8B9A)) }
+                ) { Text(if (unpublishing) "Aguarde…" else "Remover", color = DangerColor) }
             },
             dismissButton = {
                 TextButton(enabled = !unpublishing, onClick = { pendingUnpublish = null }) {
@@ -189,7 +199,7 @@ internal fun OnlineExploreScreen(
                 }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
+            titleContentColor = PrimaryText,
             textContentColor = SecondaryText
         )
     }
@@ -202,12 +212,19 @@ internal fun OnlineExploreScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Explorar", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text("Explorar no Story Teller", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("Explorar no Story Teller", color = PrimaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Histórias públicas hospedadas no Supabase. Baixe para ler e guardar na biblioteca.",
                     color = SecondaryText,
                     fontSize = 14.sp
                 )
+                if (catalogOffline.value) {
+                    Text(
+                        "Sem conexão: mostrando a última versão salva no aparelho.",
+                        color = WarnColor,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
         item {
@@ -229,7 +246,7 @@ internal fun OnlineExploreScreen(
                 }
             }
             error != null -> item {
-                Text(error ?: "", color = Color(0xFFFF8B9A), fontSize = 14.sp)
+                Text(error ?: "", color = DangerColor, fontSize = 14.sp)
             }
             stories.isEmpty() -> item {
                 Text(
@@ -273,10 +290,11 @@ internal fun RemoteStoryCard(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 RemoteCoverImage(
                     remote.coverPath,
-                    Modifier.size(72.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)),
+                    version = remote.updatedAt
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(remote.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(remote.title, color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text(
                         "por ${remote.author}",
                         color = Accent,
@@ -349,7 +367,7 @@ internal fun RemoteStoryCard(
             Button(
                 onClick = { onImportRemote(remote) },
                 enabled = !busy && !remote.filePath.isNullOrBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F)),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (busy) "Baixando…" else "Baixar para a biblioteca")
@@ -360,7 +378,7 @@ internal fun RemoteStoryCard(
                     enabled = !busy && unpublishEnabled,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Remover do Lyron Story Teler", color = Color(0xFFFF8B9A))
+                    Text("Remover do Lyron Story Teler", color = DangerColor)
                 }
             }
         }
@@ -393,12 +411,16 @@ internal fun AuthorProfileScreen(
     var favoriteStories by remember { mutableStateOf<List<RemoteStory>>(emptyList()) }
     var expandedSynopsisIds by remember { mutableStateOf(setOf<String>()) }
     var refreshTick by remember { mutableStateOf(0) }
+    // Seguir autor: o app avisa quando ele publicar história ou capítulo novo.
+    val canFollow = !ownerId.isNullOrBlank() && ownerId != currentUserId()
+    var following by remember(ownerId) { mutableStateOf(isFollowingAuthor(context, ownerId)) }
+    val requestNotificationPermission = rememberNotificationPermissionRequest()
 
     LaunchedEffect(ownerId, authorName, refreshTick) {
         loading = true
         error = null
         try {
-            val all = withContext(Dispatchers.IO) { fetchPublicStories(limit = 100) }
+            val all = withContext(Dispatchers.IO) { fetchPublicStoriesCached(context, limit = Int.MAX_VALUE) }
             written = when {
                 !ownerId.isNullOrBlank() -> all.filter { it.ownerId == ownerId }
                 authorName.isNotBlank() -> all.filter { it.author.equals(authorName, ignoreCase = true) }
@@ -418,7 +440,7 @@ internal fun AuthorProfileScreen(
                         val path = remote.first.avatarPath
                         if (!path.isNullOrBlank()) {
                             val bytes = withContext(Dispatchers.IO) { downloadAvatarBytes(path) }
-                            avatarUri = withContext(Dispatchers.IO) { storeAvatarLocally(context, bytes) }
+                            avatarUri = withContext(Dispatchers.IO) { storeAuthorAvatarCached(context, path, bytes) }
                         } else {
                             avatarUri = null
                         }
@@ -456,7 +478,7 @@ internal fun AuthorProfileScreen(
                     modifier = Modifier
                         .size(84.dp)
                         .clip(RoundedCornerShape(42.dp))
-                        .background(Color(0xFF302744)),
+                        .background(SurfaceAlt),
                     contentAlignment = Alignment.Center
                 ) {
                     if (avatarUri != null) {
@@ -471,7 +493,7 @@ internal fun AuthorProfileScreen(
                     }
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(displayName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(displayName, color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     if (!profile?.username.isNullOrBlank()) {
                         Text("@${profile!!.username}", color = Accent, fontSize = 14.sp)
                     }
@@ -494,7 +516,7 @@ internal fun AuthorProfileScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Biografia", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Biografia", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                         Text(profile!!.bio, color = SecondaryText, fontSize = 14.sp, lineHeight = 21.sp)
                     }
                 }
@@ -502,7 +524,26 @@ internal fun AuthorProfileScreen(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (canFollow) {
+                    if (following) {
+                        OutlinedButton(onClick = {
+                            unfollowAuthor(context, ownerId!!)
+                            following = false
+                            onToast("Você deixou de seguir $displayName")
+                        }) { Text("✓ Seguindo", color = Accent) }
+                    } else {
+                        Button(
+                            onClick = {
+                                followAuthor(context, ownerId!!, displayName)
+                                following = true
+                                requestNotificationPermission(false)
+                                onToast("Você segue $displayName")
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
+                        ) { Text("＋ Seguir") }
+                    }
+                }
                 OutlinedButton(onClick = { refreshTick++ }, enabled = !loading && !busy) {
                     Text("Atualizar", color = Accent)
                 }
@@ -521,12 +562,12 @@ internal fun AuthorProfileScreen(
                 }
             }
             error != null -> item {
-                Text(error ?: "", color = Color(0xFFFF8B9A), fontSize = 14.sp)
+                Text(error ?: "", color = DangerColor, fontSize = 14.sp)
             }
             else -> {
                 if (showWritten) {
                     item {
-                        Text("Histórias publicadas", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Histórias publicadas", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                     if (written.isEmpty()) {
                         item {
@@ -547,10 +588,11 @@ internal fun AuthorProfileScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         RemoteCoverImage(
                                             remote.coverPath,
-                                            Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))
+                                            Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
+                                            version = remote.updatedAt
                                         )
                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(remote.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            Text(remote.title, color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                             if (remote.genres.isNotEmpty()) {
                                                 Text(remote.genres.joinToString(" · "), color = Accent, fontSize = 12.sp)
                                             }
@@ -593,7 +635,7 @@ internal fun AuthorProfileScreen(
                                         enabled = !busy && !remote.filePath.isNullOrBlank(),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = Accent,
-                                            contentColor = Color(0xFF17121F)
+                                            contentColor = OnAccent
                                         ),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -616,7 +658,7 @@ internal fun AuthorProfileScreen(
                 if (showFavorites) {
                     item {
                         Spacer(Modifier.height(4.dp))
-                        Text("Favoritas", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Favoritas", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                     if (favoriteStories.isEmpty()) {
                         item {
@@ -643,7 +685,7 @@ internal fun StoryCard(story: Story, onClick: () -> Unit) {
     ) {
         Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF393047), RoundedCornerShape(12.dp)),
+                modifier = Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceAlt, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (story.coverImageUri != null) StoredImage(story.coverImageUri, Modifier.fillMaxSize(), maxDimension = 256)
@@ -659,7 +701,7 @@ internal fun StoryCard(story: Story, onClick: () -> Unit) {
                 )
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(story.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(story.title, color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(story.author, color = SecondaryText, fontSize = 12.sp)
                 Text(
                     buildString {
@@ -701,15 +743,22 @@ internal fun ExploreScreen(
     var tagFilter by remember { mutableStateOf<String?>(null) }
 
     // Catálogo online: a pesquisa precisa enxergar as histórias públicas, não só a biblioteca local.
+    val searchContext = LocalContext.current
     var onlineStories by remember { mutableStateOf<List<RemoteStory>>(emptyList()) }
     var onlineLoading by remember { mutableStateOf(true) }
     var onlineError by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
     LaunchedEffect(refreshTick) {
-        onlineLoading = true
+        val cached = if (onlineStories.isEmpty()) withContext(Dispatchers.IO) { loadCatalogCache(searchContext) } else null
+        if (cached != null && cached.isNotEmpty()) {
+            onlineStories = cached.take(500)
+            onlineLoading = false
+        } else {
+            onlineLoading = true
+        }
         onlineError = null
         try {
-            onlineStories = withContext(Dispatchers.IO) { fetchPublicStories(limit = 500) }
+            onlineStories = withContext(Dispatchers.IO) { fetchPublicStoriesCached(searchContext, limit = 500) }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -766,7 +815,7 @@ internal fun ExploreScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("Pesquisar histórias", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text("Pesquisar histórias", color = PrimaryText, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(
                 "Busque pelo título, autor, gênero ou tag, na biblioteca e nas histórias públicas online.",
                 color = SecondaryText,
@@ -785,7 +834,7 @@ internal fun ExploreScreen(
         }
         if (allGenres.isNotEmpty()) {
             item {
-                Text("Gênero", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Gênero", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     FilterChip(selected = genreFilter == null, onClick = { genreFilter = null }, label = { Text("Todos") })
                 }
@@ -805,7 +854,7 @@ internal fun ExploreScreen(
         }
         if (allTags.isNotEmpty()) {
             item {
-                Text("Tags", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Tags", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 allTags.chunked(3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { tag ->
@@ -822,7 +871,7 @@ internal fun ExploreScreen(
 
         // Biblioteca
         item(key = "header_library") {
-            Text("Na biblioteca", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Na biblioteca", color = PrimaryText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         if (filtered.isEmpty()) {
             item(key = "empty_library") {
@@ -841,7 +890,7 @@ internal fun ExploreScreen(
 
         // Catálogo online
         item(key = "header_online") {
-            Text("Histórias online", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Histórias online", color = PrimaryText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         when {
             onlineLoading -> item(key = "online_loading") {
@@ -851,7 +900,7 @@ internal fun ExploreScreen(
             }
             onlineError != null -> item(key = "online_error") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(onlineError ?: "", color = Color(0xFFFF8B9A), fontSize = 14.sp)
+                    Text(onlineError ?: "", color = DangerColor, fontSize = 14.sp)
                     TextButton(onClick = { refreshTick++ }) { Text("Tentar novamente", color = Accent) }
                 }
             }
@@ -903,7 +952,7 @@ internal fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("Sua biblioteca", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text("Sua biblioteca", color = PrimaryText, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text("Favoritas, suas obras e histórias importadas.", color = SecondaryText, fontSize = 13.sp)
             OutlinedButton(onClick = onImportClick, enabled = !transferBusy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (transferBusy) "Processando arquivo…" else "Importar história .lyr", color = Accent)
@@ -911,7 +960,7 @@ internal fun LibraryScreen(
         }
         if (allGenres.isNotEmpty()) {
             item {
-                Text("Filtrar por gênero", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Filtrar por gênero", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Surface(
@@ -922,7 +971,7 @@ internal fun LibraryScreen(
                         Text(
                             "Todos",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = if (selectedGenreFilter == null) Color(0xFF17121F) else SecondaryText,
+                            color = if (selectedGenreFilter == null) OnAccent else SecondaryText,
                             fontSize = 12.sp
                         )
                     }
@@ -942,7 +991,7 @@ internal fun LibraryScreen(
                                 Text(
                                     genre,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    color = if (selected) Color(0xFF17121F) else SecondaryText,
+                                    color = if (selected) OnAccent else SecondaryText,
                                     fontSize = 12.sp
                                 )
                             }
@@ -952,7 +1001,7 @@ internal fun LibraryScreen(
             }
         }
         item {
-            Text("★ Favoritas", color = Color(0xFFFFD18A), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("★ Favoritas", color = WarnColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         if (filteredFavorites.isEmpty()) {
             item { Text("Nenhuma história favorita ainda.", color = SecondaryText, fontSize = 13.sp) }

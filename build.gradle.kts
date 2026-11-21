@@ -9,6 +9,10 @@ buildscript {
     }
     dependencies {
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.21")
+        // Push (Firebase): o plugin só entra no build se você colocou app/google-services.json
+        if (file("app/google-services.json").exists()) {
+            classpath("com.google.gms:google-services:4.4.3")
+        }
     }
 }
 

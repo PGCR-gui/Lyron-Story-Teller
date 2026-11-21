@@ -153,25 +153,21 @@ internal fun decodeStoredImage(context: Context, uriString: String, maxDimension
 internal fun RemoteCoverImage(
     coverPath: String?,
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    /** Ex.: updatedAt da história; entra na chave do cache para uma capa trocada não ficar velha. */
+    version: String? = null
 ) {
-    val url = publicCoverUrl(coverPath)
-    val bitmap by produceState<Bitmap?>(initialValue = null, url) {
-        value = if (url == null) null else withContext(Dispatchers.IO) {
-            runCatching {
-                val conn = java.net.URL(url).openConnection()
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                conn.getInputStream().use { stream ->
-                    BitmapFactory.decodeStream(stream)
-                }
-            }.getOrNull()
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, coverPath, version) {
+        // memória → disco → rede (veja OfflineCache.kt); funciona sem internet depois da 1ª vez.
+        value = if (coverPath.isNullOrBlank()) null else withContext(Dispatchers.IO) {
+            runCatching { loadCoverBitmap(context, coverPath, version) }.getOrNull()
         }
     }
     if (bitmap != null) {
         Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = null, modifier = modifier, contentScale = contentScale)
     } else {
-        Box(modifier = modifier.background(Color(0xFF302744), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.background(SurfaceAlt, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
             Text("✍", color = Accent, fontSize = 28.sp)
         }
     }
@@ -193,7 +189,7 @@ internal fun StoredImage(
         Image(bitmap = loaded.asImageBitmap(), contentDescription = null, modifier = modifier, contentScale = contentScale)
     } else {
         Box(
-            modifier = modifier.background(Color(0xFF302744), RoundedCornerShape(10.dp)),
+            modifier = modifier.background(SurfaceAlt, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) { Text("▧", color = Accent, fontSize = 28.sp) }
     }
@@ -212,11 +208,54 @@ internal fun avatarJpegBytes(context: Context, uriString: String): ByteArray? {
     return output.toByteArray()
 }
 
-/** Guarda a foto baixada do servidor no armazenamento privado e devolve a Uri (nome novo a cada vez). */
+/** Pasta da foto de perfil do próprio usuário (armazenamento privado do app). */
+private fun ownAvatarDir(context: Context): File = File(context.filesDir, "avatars").apply { mkdirs() }
+
+/**
+ * Guarda a foto de perfil DO USUÁRIO no armazenamento privado e devolve a Uri (nome novo a cada vez).
+ * Não apaga mais nada aqui: o arquivo em uso só é removido por [pruneOwnAvatars], depois que o
+ * perfil já aponta para o arquivo novo. Antes, esta função limpava a pasta inteira e, como o perfil
+ * de autor também a usava, abrir qualquer perfil apagava a foto do próprio usuário.
+ */
 internal fun storeAvatarLocally(context: Context, bytes: ByteArray): String {
-    val directory = File(context.filesDir, "avatars").apply { mkdirs() }
-    directory.listFiles()?.forEach { it.delete() }
-    val file = File(directory, "avatar_${System.currentTimeMillis()}.jpg")
+    val file = File(ownAvatarDir(context), "avatar_${System.currentTimeMillis()}.jpg")
     file.writeBytes(bytes)
     return Uri.fromFile(file).toString()
+}
+
+/** Remove fotos antigas do usuário, mantendo só a que o perfil usa agora ([keepUri]). */
+internal fun pruneOwnAvatars(context: Context, keepUri: String?) {
+    runCatching {
+        ownAvatarDir(context).listFiles()?.forEach { f ->
+            if (Uri.fromFile(f).toString() != keepUri) f.delete()
+        }
+    }
+}
+
+/**
+ * Foto de OUTRO autor: fica no cache (o sistema pode limpar), com um arquivo por caminho do bucket,
+ * sem mexer na foto do usuário.
+ */
+internal fun storeAuthorAvatarCached(context: Context, remotePath: String, bytes: ByteArray): String {
+    val dir = File(context.cacheDir, "author_avatars").apply { mkdirs() }
+    val file = File(dir, "a_${remotePath.hashCode().toUInt().toString(16)}.jpg")
+    file.writeBytes(bytes)
+    return Uri.fromFile(file).toString()
+}
+
+/** Copia a foto escolhida na galeria para o armazenamento privado (quadrada, 512 px, JPEG). */
+internal fun importPickedAvatar(context: Context, pickedUri: String): String? {
+    val bytes = avatarJpegBytes(context, pickedUri) ?: return null
+    return runCatching {
+        val file = File(ownAvatarDir(context), "avatar_${System.currentTimeMillis()}.jpg")
+        file.writeBytes(bytes)
+        Uri.fromFile(file).toString()
+    }.getOrNull()
+}
+
+/** true se a imagem ainda pode ser lida (arquivo existe / permissão da Uri continua valendo). */
+internal fun isImageReadable(context: Context, uriString: String): Boolean {
+    return runCatching {
+        context.contentResolver.openInputStream(Uri.parse(uriString))?.use { true } ?: false
+    }.getOrDefault(false)
 }

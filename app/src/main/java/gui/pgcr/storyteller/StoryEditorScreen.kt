@@ -288,17 +288,17 @@ internal fun StoryEditorScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         if (initialStory == null) "Criar história" else "Editar história",
-                        color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold
+                        color = PrimaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold
                     )
                     Text("Edite os dados da história e abra cada capítulo em sua própria tela.", color = SecondaryText, fontSize = 13.sp)
                 }
                 Surface(
-                    color = if (hasUnsavedChanges) Color(0xFF493B25) else Color(0xFF263B32),
+                    color = if (hasUnsavedChanges) WarnColor.copy(alpha = 0.18f) else SuccessColor.copy(alpha = 0.18f),
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
                         if (hasUnsavedChanges) "Não salvo" else "Salvo",
-                        color = if (hasUnsavedChanges) Color(0xFFFFD18A) else Color(0xFF9DE0B8),
+                        color = if (hasUnsavedChanges) WarnColor else SuccessColor,
                         fontSize = 11.sp, fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     )
@@ -306,7 +306,7 @@ internal fun StoryEditorScreen(
             }
             EditorField("Título da história", title, { title = it }, "Ex.: A Cidade de Vidro")
             EditorField("Autor", author, { author = it }, "Nome do autor")
-            Text("Gêneros (até $MAX_STORY_GENRES)", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Gêneros (até $MAX_STORY_GENRES)", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Text(
                 if (selectedGenres.isEmpty()) "Nenhum gênero selecionado"
                 else selectedGenres.joinToString(" · "),
@@ -324,7 +324,7 @@ internal fun StoryEditorScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         row.forEach { g ->
                             Surface(
-                                color = Color(0xFF393047),
+                                color = SurfaceAlt,
                                 shape = RoundedCornerShape(50),
                                 modifier = Modifier.clickable {
                                     selectedGenres = selectedGenres.filterNot { it == g }
@@ -334,20 +334,20 @@ internal fun StoryEditorScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text(g, color = Color.White, fontSize = 12.sp)
+                                    Text(g, color = PrimaryText, fontSize = 12.sp)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("×", color = Color(0xFFFF8B9A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text("×", color = DangerColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
                 }
             }
-            Text("Classificação etária", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Classificação etária", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             OutlinedButton(onClick = { showRatingPicker = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(rating, color = Accent)
             }
-            Text("Avisos de conteúdo", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Avisos de conteúdo", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Text(
                 "Texto exibido junto à classificação. Pode editar livremente (padrão baseado na classificação escolhida).",
                 color = SecondaryText,
@@ -367,14 +367,14 @@ internal fun StoryEditorScreen(
             ) {
                 Text("Restaurar texto padrão", color = Accent, fontSize = 12.sp)
             }
-            Text("Status da história", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Status da história", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 STORY_STATUSES.forEach { option ->
                     val selected = status == option
                     val color = when (option) {
-                        STATUS_COMPLETE -> Color(0xFF9DE0B8)
-                        STATUS_CANCELLED -> Color(0xFFFF8B9A)
-                        else -> Color(0xFF8BB8FF)
+                        STATUS_COMPLETE -> SuccessColor
+                        STATUS_CANCELLED -> DangerColor
+                        else -> InfoColor
                     }
                     Surface(
                         color = if (selected) color.copy(alpha = 0.25f) else CardColor,
@@ -392,7 +392,7 @@ internal fun StoryEditorScreen(
                     }
                 }
             }
-            Text("Foto de capa", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Foto de capa", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             if (coverImageUri != null) {
                 StoredImage(coverImageUri!!, Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)), ContentScale.Crop)
             }
@@ -401,13 +401,13 @@ internal fun StoryEditorScreen(
                     Text(if (coverImageUri == null) "Escolher capa" else "Trocar capa")
                 }
                 if (coverImageUri != null) {
-                    TextButton(onClick = { coverImageUri = null }) { Text("Remover", color = Color(0xFFFF8B9A)) }
+                    TextButton(onClick = { coverImageUri = null }) { Text("Remover", color = DangerColor) }
                 }
             }
             EditorField("Sinopse", description, { description = it }, "Apresente sua história", minLines = 4)
             Text("${description.length} caracteres", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.align(Alignment.End))
 
-            Text("Classificações", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Classificações", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Text(
                 "Oneshot só em histórias de 1 capítulo. História Original e Fanfic não podem ser usadas juntas.",
                 color = SecondaryText,
@@ -455,7 +455,7 @@ internal fun StoryEditorScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 label,
-                                color = if (enabled) Color.White else SecondaryText.copy(alpha = 0.6f),
+                                color = if (enabled) PrimaryText else SecondaryText.copy(alpha = 0.6f),
                                 fontWeight = FontWeight.Medium
                             )
                             if (oneshotBlocked) {
@@ -468,7 +468,7 @@ internal fun StoryEditorScreen(
                 }
             }
 
-            Text("Tags", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Tags", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Text("Tags livres para organizar e encontrar sua história.", color = SecondaryText, fontSize = 11.sp)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -492,7 +492,7 @@ internal fun StoryEditorScreen(
                         }
                     },
                     enabled = newTagText.trim().isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F))
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
                 ) {
                     Text("Adicionar")
                 }
@@ -505,7 +505,7 @@ internal fun StoryEditorScreen(
                     ) {
                         rowTags.forEach { tag ->
                             Surface(
-                                color = Color(0xFF393047),
+                                color = SurfaceAlt,
                                 shape = RoundedCornerShape(50),
                                 modifier = Modifier.clickable {
                                     tags = tags.filterNot { it == tag }
@@ -515,9 +515,9 @@ internal fun StoryEditorScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text(tag, color = Color.White, fontSize = 12.sp)
+                                    Text(tag, color = PrimaryText, fontSize = 12.sp)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("×", color = Color(0xFFFF8B9A), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text("×", color = DangerColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -527,7 +527,7 @@ internal fun StoryEditorScreen(
 
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Capítulos", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Capítulos", color = PrimaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text("${chapters.size} capítulos · $totalWords palavras · $totalCharacters caracteres", color = SecondaryText, fontSize = 11.sp)
                 }
                 TextButton(onClick = { chapters.add(Chapter("Capítulo ${chapters.size + 1}", "", id = UUID.randomUUID().toString())) }) {
@@ -544,7 +544,7 @@ internal fun StoryEditorScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Capítulo ${index + 1}", color = Accent, fontWeight = FontWeight.Bold)
-                                if (chapter.isEnding) Text("FINAL ALTERNATIVO", color = Color(0xFF9DE0B8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                if (chapter.isEnding) Text("FINAL ALTERNATIVO", color = SuccessColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                             TextButton(onClick = {
                                 if (index > 0) {
@@ -559,10 +559,10 @@ internal fun StoryEditorScreen(
                                 }
                             }, enabled = index < chapters.lastIndex) { Text("↓", color = Accent) }
                             TextButton(onClick = { if (chapters.size > 1) chapters.removeAt(index) }, enabled = chapters.size > 1) {
-                                Text("Excluir", color = Color(0xFFFF8B9A))
+                                Text("Excluir", color = DangerColor)
                             }
                         }
-                        Text(chapter.title.ifBlank { "Capítulo sem título" }, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(chapter.title.ifBlank { "Capítulo sem título" }, color = PrimaryText, fontWeight = FontWeight.SemiBold)
                         Text(
                             "${countWords(chapter.body)} palavras · ${chapter.choices.size} escolhas",
                             color = SecondaryText, fontSize = 11.sp
@@ -570,13 +570,13 @@ internal fun StoryEditorScreen(
                         Button(
                             onClick = { onChapterSelect(index) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF302744), contentColor = Accent)
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt, contentColor = Accent)
                         ) { Text("Editar capítulo ${index + 1}") }
                     }
                 }
             }
 
-            if (error.isNotBlank()) Text(error, color = Color(0xFFFF8B9A), fontSize = 13.sp)
+            if (error.isNotBlank()) Text(error, color = DangerColor, fontSize = 13.sp)
             OutlinedButton(
                 onClick = { showPreview = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -587,7 +587,7 @@ internal fun StoryEditorScreen(
                 Button(
                     onClick = { trySaveStory() },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF17121F))
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
                 ) { Text("Salvar história") }
             }
             Spacer(Modifier.height(20.dp))
@@ -623,21 +623,21 @@ internal fun StoryEditorScreen(
                         color = SecondaryText,
                         fontSize = 12.sp
                     )
-                    if (draftStory.description.isNotBlank()) Text(draftStory.description, color = Color.White, fontSize = 14.sp)
+                    if (draftStory.description.isNotBlank()) Text(draftStory.description, color = PrimaryText, fontSize = 14.sp)
                     HorizontalDivider(color = SecondaryText.copy(alpha = 0.25f))
                     draftStory.chapters.forEachIndexed { index, chapter ->
                         Text(chapter.title.ifBlank { "Capítulo ${index + 1}" }, color = Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         if (chapter.body.isBlank() && chapter.images.isEmpty()) {
-                            Text("Este capítulo ainda não possui texto.", color = Color.White, fontSize = 14.sp)
+                            Text("Este capítulo ainda não possui texto.", color = PrimaryText, fontSize = 14.sp)
                         } else {
                             ChapterBodyContent(chapter = chapter, fontSize = 14f)
                         }
-                        if (chapter.isEnding) Text("FINAL ALTERNATIVO · ${chapter.endingMessage}", color = Color(0xFF9DE0B8), fontSize = 12.sp)
+                        if (chapter.isEnding) Text("FINAL ALTERNATIVO · ${chapter.endingMessage}", color = SuccessColor, fontSize = 12.sp)
                     }
                 }
             },
             confirmButton = { TextButton(onClick = { showPreview = false }) { Text("Voltar ao editor") } },
-            containerColor = CardColor, titleContentColor = Color.White, textContentColor = Color.White
+            containerColor = CardColor, titleContentColor = PrimaryText, textContentColor = PrimaryText
         )
     }
     if (showGenrePicker) {
@@ -684,7 +684,7 @@ internal fun StoryEditorScreen(
                             )
                             Text(
                                 genreOption,
-                                color = if (atLimit) SecondaryText.copy(alpha = 0.5f) else Color.White,
+                                color = if (atLimit) SecondaryText.copy(alpha = 0.5f) else PrimaryText,
                                 fontSize = 14.sp
                             )
                         }
@@ -695,8 +695,8 @@ internal fun StoryEditorScreen(
                 TextButton(onClick = { showGenrePicker = false }) { Text("Pronto", color = Accent) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
-            textContentColor = Color.White
+            titleContentColor = PrimaryText,
+            textContentColor = PrimaryText
         )
     }
     if (showRatingPicker) {
@@ -728,7 +728,7 @@ internal fun StoryEditorScreen(
                                 },
                                 colors = RadioButtonDefaults.colors(selectedColor = Accent)
                             )
-                            Text(option, color = Color.White)
+                            Text(option, color = PrimaryText)
                         }
                     }
                 }
@@ -737,8 +737,8 @@ internal fun StoryEditorScreen(
                 TextButton(onClick = { showRatingPicker = false }) { Text("Fechar", color = Accent) }
             },
             containerColor = CardColor,
-            titleContentColor = Color.White,
-            textContentColor = Color.White
+            titleContentColor = PrimaryText,
+            textContentColor = PrimaryText
         )
     }
 }
