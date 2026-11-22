@@ -3,6 +3,11 @@ package gui.pgcr.storyteller
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -44,18 +49,12 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.work.Constraints
-import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.WorkerParameters
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 private const val NOTIFY_PREFS = "lyron_notify"
 private const val KEY_FOLLOWED = "followed_authors"       // ownerId -> nome
@@ -67,8 +66,8 @@ private const val KEY_PERMISSION_ASKED = "permission_asked"
 internal const val CHANNEL_FAVORITES = "new_chapters_favorites"
 internal const val CHANNEL_AUTHORS = "followed_authors"
 
-private const val WORK_PERIODIC = "lyron_new_content_periodic"
-private const val WORK_NOW = "lyron_new_content_now"
+private const val JOB_PERIODIC = 4101
+private const val JOB_NOW = 4102
 
 private fun notifyPrefs(context: Context) = context.getSharedPreferences(NOTIFY_PREFS, Context.MODE_PRIVATE)
 
@@ -256,37 +255,57 @@ internal suspend fun checkForNewContent(context: Context): Int {
     return sent
 }
 
-internal class NewContentWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result = try {
-        checkForNewContent(applicationContext)
-        Result.success()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        // Sem rede/servidor fora do ar: tenta de novo algumas vezes; depois espera o próximo ciclo.
-        if (runAttemptCount < 3) Result.retry() else Result.success()
+/**
+ * Verificação em segundo plano feita pelo JobScheduler do Android (sem bibliotecas extras).
+ * Roda quando há internet; se falhar, o Android tenta de novo mais tarde.
+ */
+class NewContentJobService : JobService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onStartJob(params: JobParameters): Boolean {
+        scope.launch {
+            val failed = try {
+                checkForNewContent(applicationContext)
+                false
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                true
+            }
+            jobFinished(params, failed) // failed = true -> reagenda com espera crescente
+        }
+        return true // trabalho continua em segundo plano
+    }
+
+    override fun onStopJob(params: JobParameters): Boolean {
+        scope.cancel()
+        return true // reagenda
     }
 }
 
-private val networkConstraint: Constraints
-    get() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+private fun jobScheduler(context: Context): JobScheduler? =
+    context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? JobScheduler
+
+private fun jobBuilder(context: Context, id: Int) =
+    JobInfo.Builder(id, ComponentName(context, NewContentJobService::class.java))
+        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
 
 /** Agenda a verificação a cada hora (o Android pode agrupar/atrasar para poupar bateria). */
 internal fun scheduleNewContentChecks(context: Context) {
     createNotificationChannels(context)
-    val request = PeriodicWorkRequestBuilder<NewContentWorker>(1, TimeUnit.HOURS)
-        .setConstraints(networkConstraint)
+    val scheduler = jobScheduler(context) ?: return
+    if (scheduler.getPendingJob(JOB_PERIODIC) != null) return // já agendado: não reinicia o relógio
+    val job = jobBuilder(context, JOB_PERIODIC)
+        .setPeriodic(60L * 60L * 1000L)
+        .setPersisted(true) // sobrevive a reinício do aparelho
         .build()
-    WorkManager.getInstance(context)
-        .enqueueUniquePeriodicWork(WORK_PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
+    runCatching { scheduler.schedule(job) }
 }
 
-/** Faz uma verificação agora (ao seguir um autor, ao abrir o app, ou pelo botão das configurações). */
+/** Faz uma verificação agora (ao seguir um autor, pelo botão das configurações). */
 internal fun checkNewContentNow(context: Context) {
-    val request = OneTimeWorkRequestBuilder<NewContentWorker>()
-        .setConstraints(networkConstraint)
-        .build()
-    WorkManager.getInstance(context).enqueueUniqueWork(WORK_NOW, ExistingWorkPolicy.REPLACE, request)
+    val scheduler = jobScheduler(context) ?: return
+    runCatching { scheduler.schedule(jobBuilder(context, JOB_NOW).build()) }
 }
 
 // ---------------------------------------------------------------------------

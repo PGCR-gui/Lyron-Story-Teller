@@ -361,12 +361,26 @@ fun StoryVerseApp() {
         }
     }
     // Login e criação de conta compartilham o mesmo fluxo; ao terminar, volta para a tela de perfil.
-    fun runAuth(email: String, password: String, isSignUp: Boolean) {
+    fun runAuth(email: String, password: String, isSignUp: Boolean, username: String = "", nickname: String = "") {
         onlineBusy = true
         coroutineScope.launch {
             try {
+                if (isSignUp && username.isNotBlank()) {
+                    // Confere o nome de usuário antes de criar (se não der para conferir, o banco garante a unicidade).
+                    val available = runCatching {
+                        withContext(Dispatchers.IO) { isUsernameAvailable(username, null) }
+                    }.getOrNull()
+                    if (available == false) {
+                        accountNotice.value = "Esse nome de usuário já está em uso. Escolha outro."
+                        return@launch
+                    }
+                }
                 withContext(Dispatchers.IO) {
-                    if (isSignUp) signUpEmail(email, password) else signInEmail(email, password)
+                    if (isSignUp) signUpEmail(email, password, username, nickname) else signInEmail(email, password)
+                }
+                if (isSignUp) {
+                    userProfile = userProfile.copy(nickname = nickname, username = username)
+                    saveUserProfile(context, userProfile)
                 }
                 isLoggedIn = currentUserId() != null
                 authEmail = currentUserEmail().orEmpty()
@@ -379,7 +393,7 @@ fun StoryVerseApp() {
                 }
                 if (isSignUp) currentScreen = AppScreen.PROFILE
             } catch (e: Exception) {
-                accountNotice.value = e.message ?: if (isSignUp) "Falha ao criar a conta" else "Falha no login"
+                accountNotice.value = friendlyAuthError(e, isSignUp)
             } finally {
                 onlineBusy = false
             }
@@ -865,7 +879,14 @@ fun StoryVerseApp() {
                 )
                 AppScreen.CREATE_ACCOUNT -> CreateAccountScreen(
                     authBusy = onlineBusy,
-                    onCreateAccount = { email, password -> runAuth(email, password, isSignUp = true) },
+                    onCheckUsername = { name ->
+                        runCatching {
+                            withContext(Dispatchers.IO) { isUsernameAvailable(name, null) }
+                        }.getOrNull()
+                    },
+                    onCreateAccount = { email, password, username, nickname ->
+                        runAuth(email, password, isSignUp = true, username = username, nickname = nickname)
+                    },
                     onHaveAccount = { currentScreen = AppScreen.PROFILE }
                 )
                 AppScreen.MANAGE_POSTED -> ManagePostedScreen(
@@ -926,9 +947,13 @@ fun StoryVerseApp() {
                     story = selectedStory,
                     isFavorite = selectedStory.id in favoriteIds,
                     onFavoriteClick = { toggleFavorite(selectedStory.id) },
-                    hasProgress = loadReadingProgressMap(context)[selectedStory.id]?.let { p ->
-                        p.updatedAt > 0L && (p.chapterIndex > 0 || p.pageIndex > 0)
-                    } == true,
+                    // Quem já alcançou um final (alternativo ou definitivo) não recebe mais "Continuar de onde parou".
+                    hasProgress = run {
+                        val ended = storyStats[selectedStory.id]?.let { it.endingVisits.isNotEmpty() || it.completedReadings > 0 } == true
+                        !ended && loadReadingProgressMap(context)[selectedStory.id]?.let { p ->
+                            p.updatedAt > 0L && (p.chapterIndex > 0 || p.pageIndex > 0)
+                        } == true
+                    },
                     onContinueClick = {
                         val progress = loadReadingProgressMap(context)[selectedStory.id]
                         chapterIndex = (progress?.chapterIndex ?: 0).coerceIn(0, selectedStory.chapters.lastIndex.coerceAtLeast(0))
@@ -950,6 +975,18 @@ fun StoryVerseApp() {
                         readingHistory.clear()
                         showStoryEnding = false
                         currentScreen = AppScreen.READER
+                    },
+                    unlockedChapterCount = run {
+                        val authorCanEdit = userStories.any { it.id == selectedStory.id } && selectedStory.editable
+                        if (authorCanEdit || selectedStory.isChoiceStory) {
+                            Int.MAX_VALUE
+                        } else {
+                            // Leitor só abre capítulos que já alcançou lendo (o autor abre todos para revisar).
+                            val visited = (storyStats[selectedStory.id] ?: StoryStats()).chapterVisits.keys
+                            val farthest = selectedStory.chapters.indexOfLast { it.id in visited }
+                            val saved = loadReadingProgressMap(context)[selectedStory.id]?.chapterIndex ?: 0
+                            maxOf(farthest, saved, 0) + 1
+                        }
                     },
                     onChapterClick = { index ->
                         chapterIndex = index
@@ -1188,7 +1225,7 @@ fun StoryVerseApp() {
                         val completes = destination.isEnding || (!isChoiceStory && destinationIndex == selectedStory.chapters.lastIndex)
                         recordTransition(selectedStory, "linear:${from.id}->${destination.id}", destination, if (completes) "chapter:${destination.id}" else null)
                         readingHistory.add(chapterIndex); chapterIndex++
-                        if (completes) showStoryEnding = true
+                        // A mensagem do final só aparece ao tocar em "Fim" (depois de ler o capítulo).
                     } else {
                         // Já no último capítulo
                         showStoryEnding = true

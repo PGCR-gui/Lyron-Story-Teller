@@ -9,9 +9,26 @@ plugins {
     kotlin("plugin.serialization") version "2.3.21"
 }
 
-// Push (Firebase): aplica o plugin só quando o arquivo existe (veja push_setup/PASSO_A_PASSO.md)
-if (rootProject.file("app/google-services.json").exists()) {
+// Push (Firebase): só entra no build quando existe app/google-services.json (veja push_setup/PASSO_A_PASSO.md).
+// Sem o arquivo o app compila sem baixar nada do Firebase (útil no Code On The Go, que usa Maven offline).
+val hasFirebase = rootProject.file("app/google-services.json").exists()
+if (hasFirebase) {
     apply(plugin = "com.google.gms.google-services")
+}
+
+// Os 2 arquivos que dependem do Firebase (PushService e FcmBridge) têm duas versões em app/push_variants/.
+// Antes de compilar, copia a certa para src/main: "firebase" se existir app/google-services.json, senão "nofirebase".
+run {
+    val variant = if (hasFirebase) "firebase" else "nofirebase"
+    val target = file("src/main/java/gui/pgcr/storyteller")
+    listOf("PushService", "FcmBridge").forEach { name ->
+        val template = file("push_variants/$variant/$name.kt.txt")
+        val destination = File(target, "$name.kt")
+        if (template.exists()) {
+            val wanted = template.readText()
+            if (!destination.exists() || destination.readText() != wanted) destination.writeText(wanted)
+        }
+    }
 }
 
 val keystorePropsFile = rootProject.file("release.properties")
@@ -40,7 +57,7 @@ android {
     lint {
         checkReleaseBuilds = false
     }
-        
+
     signingConfigs {
         if (hasValidSigningProps) {
             create("release") {
@@ -56,8 +73,8 @@ android {
         applicationId = "gui.pgcr.storyteller"  
         minSdk = 26  
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.08"
+        versionCode = 9
+        versionName = "0.09"
         
         vectorDrawables { 
             useSupportLibrary = true
@@ -176,10 +193,9 @@ dependencies {
     implementation("io.ktor:ktor-client-android:3.2.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
-    // Verificação periódica de capítulos novos (notificações)
-    implementation("androidx.work:work-runtime-ktx:2.10.1")
-
-    // Push (Firebase Cloud Messaging)
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-messaging")
+    // Push (Firebase Cloud Messaging): só com app/google-services.json
+    if (hasFirebase) {
+        implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+        implementation("com.google.firebase:firebase-messaging")
+    }
 }

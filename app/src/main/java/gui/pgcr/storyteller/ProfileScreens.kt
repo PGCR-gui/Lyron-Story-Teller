@@ -167,13 +167,13 @@ internal fun ProfileScreen(
                 value = password,
                 onValueChange = { password = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Senha (mín. 6)") },
+                label = { Text("Senha (mín. $AUTH_MIN_PASSWORD)") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation()
             )
             Button(
                 onClick = { onLogin(email.trim(), password) },
-                enabled = !authBusy && email.contains("@") && password.length >= 6,
+                enabled = !authBusy && email.contains("@") && password.length >= AUTH_MIN_PASSWORD,
                 colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                 modifier = Modifier.fillMaxWidth()
             ) {

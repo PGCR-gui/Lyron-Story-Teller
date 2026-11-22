@@ -1,3 +1,5 @@
+// MODELO "firebase": o build copia este arquivo para src/main/java/.../PushService.kt
+// conforme exista (ou não) app/google-services.json. Edite AQUI, não a cópia.
 package gui.pgcr.storyteller
 
 import com.google.firebase.messaging.FirebaseMessagingService

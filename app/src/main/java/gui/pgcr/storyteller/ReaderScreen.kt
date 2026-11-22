@@ -186,8 +186,14 @@ internal fun ReaderScreen(
     val fontFamily = remember(readerFontFamily) { resolveFontFamily(readerFontFamily, loadCustom = true, context = context) }
     var showReaderMenu by remember { mutableStateOf(false) }
 
+    // O contador openMenuTick só sobe (e é guardado fora do leitor). Se o menu abrisse sempre que o valor fosse > 0,
+    // ele reabriria sozinho a cada vez que o leitor fosse aberto de novo. Por isso só reage a MUDANÇAS do contador.
+    var handledMenuTick by remember { mutableStateOf(openMenuTick) }
     LaunchedEffect(openMenuTick) {
-        if (openMenuTick > 0) showReaderMenu = true
+        if (openMenuTick != handledMenuTick) {
+            handledMenuTick = openMenuTick
+            showReaderMenu = true
+        }
     }
 
     val textMeasurer = rememberTextMeasurer()
@@ -233,6 +239,24 @@ internal fun ReaderScreen(
         }
     }
 
+    // --- Avanço controlado: só passa de capítulo depois de chegar ao fim dele (ou ao fazer uma escolha) ---
+    LaunchedEffect(chapterIndex) { scrollState.scrollTo(0) }
+    val scrollAtEnd by remember {
+        derivedStateOf { scrollState.maxValue != Int.MAX_VALUE && scrollState.value >= scrollState.maxValue - 48 }
+    }
+    val atChapterEnd = if (readerMode == "paginated") pageIndex >= pages.lastIndex else scrollAtEnd
+    val latestAtChapterEnd by rememberUpdatedState(atChapterEnd)
+    var finishedChapters by remember(story.id) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(chapter.id, atChapterEnd) {
+        if (atChapterEnd && chapter.id !in finishedChapters) {
+            // Espera o layout do capítulo novo assentar para não marcar como lido por engano.
+            kotlinx.coroutines.delay(200)
+            if (latestAtChapterEnd) finishedChapters = finishedChapters + chapter.id
+        }
+    }
+    // Capítulo já terminado antes pode ser atravessado de novo sem reler tudo.
+    val canProceed = atChapterEnd || chapter.id in finishedChapters
+
     // Salva progresso sempre que capítulo/página mudam
     LaunchedEffect(story.id, chapterIndex, pageIndex) {
         saveReadingProgress(context, story.id, chapterIndex, pageIndex)
@@ -244,11 +268,11 @@ internal fun ReaderScreen(
     var prevChapterIndex by remember { mutableStateOf(chapterIndex) }
     LaunchedEffect(chapterIndex) {
         if (prevChapterIndex != chapterIndex) {
+            pageIndex = 0
             val forward = chapterIndex > prevChapterIndex
             chapterAnim.snapTo(if (forward) 0.18f else -0.18f)
             chapterAnim.animateTo(0f, animationSpec = tween(400, easing = FastOutSlowInEasing))
             prevChapterIndex = chapterIndex
-            pageIndex = 0
         }
     }
 
@@ -496,7 +520,7 @@ internal fun ReaderScreen(
         ) {
             OutlinedButton(
                 onClick = onPrevious,
-                enabled = canGoBack || chapterIndex > 0,
+                enabled = canGoBack || (!story.isChoiceStory && chapterIndex > 0),
                 border = BorderStroke(1.dp, theme.secondary.copy(alpha = 0.4f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = theme.text)
             ) { Text("Anterior") }
@@ -517,20 +541,38 @@ internal fun ReaderScreen(
                 )
             }
 
+            val hasChoices = chapter.choices.isNotEmpty() && !chapter.isEnding
+            // Botão "Fim": final alternativo ou último capítulo (sem escolhas).
+            val isFinalButton = !hasChoices && (chapter.isEnding || chapterIndex >= story.chapters.lastIndex)
+            // No modo paginado, antes da última página o botão vira "próxima página" (nunca pula o capítulo).
+            val turnsPage = readerMode == "paginated" && !canProceed
             Button(
-                onClick = onNext,
+                onClick = {
+                    when {
+                        turnsPage -> animatePageTurn(true)
+                        isFinalButton -> onFinishChapter()
+                        else -> onNext()
+                    }
+                },
+                enabled = when {
+                    turnsPage -> true
+                    hasChoices -> false
+                    else -> canProceed
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = theme.accent, contentColor = theme.background)
             ) {
                 Text(
                     when {
-                        chapterIndex >= story.chapters.lastIndex && chapter.choices.isEmpty() -> "Fim"
+                        turnsPage -> "Página ›"
+                        hasChoices -> "Escolha"
+                        isFinalButton -> "Fim"
                         else -> "Próximo"
                     }
                 )
             }
         }
 
-        if (chapter.choices.isNotEmpty() && (readerMode != "paginated" || pageIndex >= pages.lastIndex)) {
+        if (chapter.choices.isNotEmpty() && !chapter.isEnding && canProceed) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -624,21 +666,16 @@ internal fun ReaderScreen(
     }
 
     if (showEnding) {
-        val endTitle = when (story.status) {
-            STATUS_COMPLETE -> "Fim da história"
-            STATUS_CANCELLED -> "História cancelada"
+        val endTitle = when {
+            chapter.isEnding -> "Fim"
+            story.status == STATUS_COMPLETE -> "Fim da história"
+            story.status == STATUS_CANCELLED -> "História cancelada"
             else -> "História em andamento"
         }
         val endMessage = when {
-            chapter.isEnding && story.status == STATUS_COMPLETE ->
-                "Você chegou ao fim dessa história!"
-            chapter.isEnding && story.status == STATUS_CANCELLED ->
-                "O autor decidiu que não irá mais continuar essa história."
-            chapter.isEnding -> {
-                val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR"))
-                    .format(java.util.Date(story.lastUpdated))
-                "Esta história ainda está incompleta…\nAtualizado pela última vez em: $date"
-            }
+            // Final alternativo: mostra a mensagem escrita pelo autor para ESTE final.
+            chapter.isEnding ->
+                chapter.endingMessage.ifBlank { "Você chegou a um desfecho desta história." }
             story.status == STATUS_COMPLETE ->
                 "Você chegou ao fim dessa história!"
             story.status == STATUS_CANCELLED ->

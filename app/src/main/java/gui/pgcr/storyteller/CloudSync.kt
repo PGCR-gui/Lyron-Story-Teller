@@ -1,20 +1,16 @@
 package gui.pgcr.storyteller
 
 import android.content.Context
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlin.coroutines.resume
 
 /**
  * Espelha no Supabase o que o servidor precisa saber para mandar push:
@@ -25,7 +21,7 @@ import kotlin.coroutines.resume
  * O aparelho continua sendo a fonte principal (favoritas/seguidos funcionam offline); aqui só se envia
  * o que mudou. Remoções feitas sem internet ficam numa fila e são reenviadas na próxima sincronização.
  * Tudo é "melhor esforço": se a tabela não existir ou a rede falhar, o app segue normal e o aviso
- * local (WorkManager) continua funcionando.
+ * local (JobScheduler) continua funcionando.
  */
 
 private const val PREFS = "lyron_notify"
@@ -170,18 +166,6 @@ internal suspend fun syncCloudSubscriptions(context: Context) {
 // ---------------------------------------------------------------------------
 // Token do aparelho (FCM)
 // ---------------------------------------------------------------------------
-
-/** null se o Firebase não está configurado (sem google-services.json) ou se o token não veio. */
-private suspend fun awaitFcmToken(context: Context): String? {
-    if (FirebaseApp.getApps(context).isEmpty()) return null
-    return suspendCancellableCoroutine { cont ->
-        runCatching {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                if (cont.isActive) cont.resume(if (task.isSuccessful) task.result else null)
-            }
-        }.onFailure { if (cont.isActive) cont.resume(null) }
-    }
-}
 
 /** Registra (ou atualiza) o token deste aparelho para a conta logada, com as preferências de aviso. */
 internal fun syncPushRegistration(context: Context) {

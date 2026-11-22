@@ -99,6 +99,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
@@ -131,6 +132,8 @@ internal fun StoryDetailsScreen(
     onContinueClick: () -> Unit,
     onReadClick: () -> Unit,
     onChapterClick: (Int) -> Unit,
+    /** Quantos capítulos (a partir do 1º) o leitor já pode abrir; os demais aparecem bloqueados. */
+    unlockedChapterCount: Int = Int.MAX_VALUE,
     canEdit: Boolean,
     onEditClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -336,25 +339,11 @@ internal fun StoryDetailsScreen(
             }
         }
         item {
-            Text("Classificação indicativa", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(top = 6.dp)
-            ) {
-                Image(
-                    painter = painterResource(id = classifDrawableRes(story.rating)),
-                    contentDescription = story.rating,
-                    modifier = Modifier.height(40.dp).wrapContentWidth()
-                )
-                Text(story.rating, color = Accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-            val warnings = story.contentWarnings.ifBlank { defaultContentWarningFor(story.rating) }
-            if (warnings.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text("Avisos de conteúdo", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(warnings, color = SecondaryText, fontSize = 14.sp, lineHeight = 21.sp)
-            }
+            // Classificação indicativa + aviso de conteúdo numa peça só (veja RatingCard.kt).
+            ContentRatingCard(
+                rating = story.rating,
+                warnings = story.contentWarnings.ifBlank { defaultContentWarningFor(story.rating) }
+            )
         }
         item {
             if (hasProgress) {
@@ -376,7 +365,7 @@ internal fun StoryDetailsScreen(
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = onReadClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
-                        Text("Começar leitura")
+                        Text(if (stats.completedReadings > 0 || stats.endingVisits.isNotEmpty()) "Ler novamente" else "Começar leitura")
                     }
                     OutlinedButton(onClick = onFavoriteClick, modifier = Modifier.weight(1f)) {
                         Text(if (isFavorite) "★ Favorita" else "☆ Favoritar", color = if (isFavorite) WarnColor else Accent)
@@ -415,17 +404,24 @@ internal fun StoryDetailsScreen(
         if (!isChoiceStory) {
             item { Text("Capítulos", color = PrimaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
             items(story.chapters.size) { index ->
+                val locked = index >= unlockedChapterCount
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onChapterClick(index) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (locked) Modifier.alpha(0.5f) else Modifier.clickable { onChapterClick(index) }),
                     colors = CardDefaults.cardColors(containerColor = CardColor),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(story.chapters[index].title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
-                            Text("Capítulo ${index + 1}", color = SecondaryText, fontSize = 12.sp)
+                            Text(
+                                if (locked) "Capítulo ${index + 1} · termine o anterior para liberar" else "Capítulo ${index + 1}",
+                                color = SecondaryText,
+                                fontSize = 12.sp
+                            )
                         }
-                        Text("›", color = Accent, fontSize = 28.sp)
+                        Text(if (locked) "🔒" else "›", color = Accent, fontSize = if (locked) 20.sp else 28.sp)
                     }
                 }
             }

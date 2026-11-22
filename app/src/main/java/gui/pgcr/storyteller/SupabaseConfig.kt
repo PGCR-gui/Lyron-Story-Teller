@@ -15,6 +15,8 @@ import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 const val SUPABASE_URL = "https://pvgeeaapmrwdmyyiyxaz.supabase.co"
 const val SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9pFZVySKZ-KexZQShRhiXw_5Q3giamg"
@@ -70,10 +72,49 @@ suspend fun signInEmail(email: String, password: String) {
     }
 }
 
-suspend fun signUpEmail(email: String, password: String) {
+/** Tamanho mínimo de senha exigido pelo Supabase Auth (padrão do projeto: 8). */
+const val AUTH_MIN_PASSWORD = 8
+
+/** Troca a mensagem técnica do Supabase (URL, cabeçalhos, códigos) por um texto curto em português. */
+fun friendlyAuthError(e: Throwable, isSignUp: Boolean): String {
+    val raw = e.message.orEmpty()
+    val low = raw.lowercase()
+    return when {
+        "weak_password" in low -> "A senha precisa ter pelo menos $AUTH_MIN_PASSWORD caracteres."
+        "user_already_exists" in low || "email_exists" in low || "already registered" in low ->
+            "Esse e-mail já tem uma conta. Toque em “Entrar”."
+        "invalid_credentials" in low || "invalid login credentials" in low -> "E-mail ou senha incorretos."
+        "email_not_confirmed" in low -> "Confirme seu e-mail pelo link que enviamos antes de entrar."
+        "validation_failed" in low || "invalid format" in low || "email_address_invalid" in low ->
+            "Esse e-mail não parece válido."
+        "over_email_send_rate_limit" in low || "over_request_rate_limit" in low || "rate limit" in low ->
+            "Muitas tentativas seguidas. Espere alguns minutos e tente de novo."
+        "database error" in low || "unexpected_failure" in low || "unexpected_failure" in raw ->
+            "O servidor não conseguiu concluir agora (erro no banco de dados). Tente de novo mais tarde."
+        "unable to resolve host" in low || "timeout" in low || "timed out" in low ||
+            "failed to connect" in low || e is java.io.IOException ->
+            "Sem conexão com o servidor. Confira a internet e tente de novo."
+        raw.isBlank() -> if (isSignUp) "Falha ao criar a conta." else "Falha no login."
+        // Último recurso: só a primeira linha, sem URL/cabeçalhos.
+        else -> raw.lineSequence().first().take(160)
+    }
+}
+
+/**
+ * Cria a conta. username e nickname vão como metadados do usuário (raw_user_meta_data); o gatilho do banco
+ * (veja push_setup/03_fix_username_profiles.sql) usa esses valores ao criar o perfil, mesmo antes de a
+ * pessoa confirmar o e-mail.
+ */
+suspend fun signUpEmail(email: String, password: String, username: String = "", nickname: String = "") {
     supabase.auth.signUpWith(Email, redirectUrl = AUTH_REDIRECT_URL) {
         this.email = email.trim()
         this.password = password
+        if (username.isNotBlank() || nickname.isNotBlank()) {
+            data = buildJsonObject {
+                if (username.isNotBlank()) put("username", username.trim().lowercase())
+                if (nickname.isNotBlank()) put("nickname", nickname.trim())
+            }
+        }
     }
 }
 
