@@ -271,6 +271,7 @@ internal fun ManagePostedScreen(
     var pendingUnpublish by remember { mutableStateOf<RemoteStory?>(null) }
     var unpublishing by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
+    val context = LocalContext.current
     val myId = currentUserId()
 
     LaunchedEffect(refreshTick, isLoggedIn) {
@@ -310,6 +311,7 @@ internal fun ManagePostedScreen(
                         scope.launch {
                             try {
                                 withContext(Dispatchers.IO) { unpublishStory(target) }
+                                CatalogStore.removeLocally(context, target.id)
                                 onToast("Publicação removida")
                                 pendingUnpublish = null
                                 refreshTick++

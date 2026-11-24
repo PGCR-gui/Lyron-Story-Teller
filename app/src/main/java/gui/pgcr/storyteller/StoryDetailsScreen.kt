@@ -213,7 +213,7 @@ internal fun StoryDetailsScreen(
                         modifier = Modifier.fillMaxWidth().height(170.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("𒀱", color = Accent, fontSize = 64.sp)
+                        AssetIcon(AssetIcons.DEFAULT_COVER, Modifier.size(110.dp))
                         Image(
                             painter = painterResource(id = classifDrawableRes(story.rating)),
                             contentDescription = "Classificação ${story.rating}",
@@ -387,7 +387,7 @@ internal fun StoryDetailsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (transferBusy) "Publicando…" else "Publicar online (somente leitura)")
+                    Text(if (transferBusy) "Publicando…" else "Publicar online (ou atualizar)")
                 }
             }
             if (canEdit) {

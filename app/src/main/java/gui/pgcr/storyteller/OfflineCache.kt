@@ -30,6 +30,9 @@ private fun lyrDir(context: Context): File = File(cacheRoot(context), "lyr").app
 private fun sha(text: String): String =
     MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }.take(40)
 
+private fun coverKey(coverPath: String?, version: String?): String = sha("$coverPath|${version.orEmpty()}")
+private fun lyrKey(remote: RemoteStory): String = sha("${remote.id}|${remote.updatedAt.orEmpty()}|${remote.filePath}")
+
 /** Mantém só os [maxFiles] arquivos mais recentes da pasta. */
 private fun prune(dir: File, maxFiles: Int) {
     val files = dir.listFiles()?.filter { it.isFile } ?: return
@@ -97,36 +100,73 @@ private fun decodeSampled(bytes: ByteArray, maxDimension: Int = 1024): Bitmap? {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
 }
 
+/** Baixa os bytes da capa. */
+private fun fetchCoverBytesFromUrl(url: String): ByteArray? = runCatching {
+    val conn = java.net.URL(url).openConnection()
+    conn.connectTimeout = 8000
+    conn.readTimeout = 8000
+    conn.getInputStream().use { it.readBytes() }
+}.getOrNull()
+
 /**
  * Capa de uma história do catálogo: memória → disco → rede (e salva no disco).
  * [version] (ex.: updatedAt) entra na chave, assim uma capa trocada não fica velha no cache.
+ * [maxDimension] limita o tamanho decodificado (miniaturas da grade usam bem menos memória que a capa grande dos detalhes).
  */
-internal fun loadCoverBitmap(context: Context, coverPath: String?, version: String? = null): Bitmap? {
+internal fun loadCoverBitmap(
+    context: Context,
+    coverPath: String?,
+    version: String? = null,
+    maxDimension: Int = 1024
+): Bitmap? {
     val url = publicCoverUrl(coverPath) ?: return null
-    val key = sha("$coverPath|${version.orEmpty()}")
-    coverMemory.get(key)?.let { return it }
+    val key = coverKey(coverPath, version)
+    val memoryKey = "$key@$maxDimension"
+    coverMemory.get(memoryKey)?.let { return it }
     val file = File(coversDir(context), key)
     if (file.isFile) {
-        runCatching { decodeSampled(file.readBytes()) }.getOrNull()?.let {
+        runCatching { decodeSampled(file.readBytes(), maxDimension) }.getOrNull()?.let {
             file.setLastModified(System.currentTimeMillis())
-            coverMemory.put(key, it)
+            coverMemory.put(memoryKey, it)
             return it
         }
         runCatching { file.delete() }
     }
-    val bytes = runCatching {
-        val conn = java.net.URL(url).openConnection()
-        conn.connectTimeout = 8000
-        conn.readTimeout = 8000
-        conn.getInputStream().use { it.readBytes() }
-    }.getOrNull() ?: return null
-    val bitmap = runCatching { decodeSampled(bytes) }.getOrNull() ?: return null
+    val bytes = fetchCoverBytesFromUrl(url) ?: return null
+    val bitmap = runCatching { decodeSampled(bytes, maxDimension) }.getOrNull() ?: return null
     runCatching {
         file.writeBytes(bytes)
-        prune(coversDir(context), 200)
+        prune(coversDir(context), COVER_CACHE_MAX_FILES)
     }
-    coverMemory.put(key, bitmap)
+    coverMemory.put(memoryKey, bitmap)
     return bitmap
+}
+
+private const val COVER_CACHE_MAX_FILES = 800
+
+/** Garante que a capa esteja salva no disco (sem decodificar). Usado para pré-carregar o catálogo em segundo plano. */
+internal fun cacheCoverOnDisk(context: Context, remote: RemoteStory) {
+    val url = publicCoverUrl(remote.coverPath) ?: return
+    val file = File(coversDir(context), coverKey(remote.coverPath, remote.updatedAt))
+    if (file.isFile && file.length() > 0) return
+    val bytes = fetchCoverBytesFromUrl(url) ?: return
+    // Só guarda se for imagem válida.
+    if (runCatching { decodeSampled(bytes, 64) }.getOrNull() == null) return
+    runCatching { file.writeBytes(bytes) }
+}
+
+/**
+ * Apaga do disco capas e .lyr que não pertencem mais ao catálogo atual: histórias removidas do online
+ * e versões antigas (capa trocada / história atualizada).
+ */
+internal fun pruneCatalogCaches(context: Context, current: List<RemoteStory>) {
+    if (current.isEmpty()) return // lista vazia pode ser falha do servidor; não apaga nada
+    runCatching {
+        val coverKeys = current.filter { !it.coverPath.isNullOrBlank() }.map { coverKey(it.coverPath, it.updatedAt) }.toSet()
+        coversDir(context).listFiles()?.forEach { if (it.isFile && it.name !in coverKeys) runCatching { it.delete() } }
+        val lyrKeys = current.filter { !it.filePath.isNullOrBlank() }.map { lyrKey(it) }.toSet()
+        lyrDir(context).listFiles()?.forEach { if (it.isFile && it.name !in lyrKeys) runCatching { it.delete() } }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +176,7 @@ internal fun loadCoverBitmap(context: Context, coverPath: String?, version: Stri
 /** Baixa o .lyr da história; se essa versão (id + updatedAt) já foi baixada antes, reaproveita o arquivo salvo. */
 internal suspend fun downloadStoryBytesCached(context: Context, remote: RemoteStory): ByteArray {
     val path = remote.filePath ?: throw IllegalArgumentException("História sem arquivo.")
-    val file = File(lyrDir(context), sha("${remote.id}|${remote.updatedAt.orEmpty()}|$path"))
+    val file = File(lyrDir(context), lyrKey(remote))
     if (file.isFile && file.length() > 0) {
         runCatching { file.readBytes() }.getOrNull()?.let {
             file.setLastModified(System.currentTimeMillis())

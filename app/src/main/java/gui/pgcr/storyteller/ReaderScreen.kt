@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -397,10 +398,20 @@ internal fun ReaderScreen(
                     }
                 }
 
-                // Zonas de toque laterais (áreas vermelhas) + arraste
+                // Toque nas laterais (25% de cada lado) vira a página; arrastar continua funcionando.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .pointerInput(pageIndex, pages.size, chapterIndex) {
+                            detectTapGestures { offset ->
+                                val w = size.width.coerceAtLeast(1).toFloat()
+                                val yRatio = (offset.y / size.height.coerceAtLeast(1)).coerceIn(0.15f, 0.85f)
+                                when {
+                                    offset.x <= w * 0.25f -> animatePageTurn(false, yRatio)
+                                    offset.x >= w * 0.75f -> animatePageTurn(true, yRatio)
+                                }
+                            }
+                        }
                         .pointerInput(pageIndex, pages.size, chapterIndex) {
                             var dragStartX = 0f
                             var totalDragX = 0f
@@ -544,26 +555,16 @@ internal fun ReaderScreen(
             val hasChoices = chapter.choices.isNotEmpty() && !chapter.isEnding
             // Botão "Fim": final alternativo ou último capítulo (sem escolhas).
             val isFinalButton = !hasChoices && (chapter.isEnding || chapterIndex >= story.chapters.lastIndex)
-            // No modo paginado, antes da última página o botão vira "próxima página" (nunca pula o capítulo).
-            val turnsPage = readerMode == "paginated" && !canProceed
+            // Os botões são só de capítulo; as páginas viram por arraste ou toque nas laterais.
             Button(
                 onClick = {
-                    when {
-                        turnsPage -> animatePageTurn(true)
-                        isFinalButton -> onFinishChapter()
-                        else -> onNext()
-                    }
+                    if (isFinalButton) onFinishChapter() else onNext()
                 },
-                enabled = when {
-                    turnsPage -> true
-                    hasChoices -> false
-                    else -> canProceed
-                },
+                enabled = !hasChoices && canProceed,
                 colors = ButtonDefaults.buttonColors(containerColor = theme.accent, contentColor = theme.background)
             ) {
                 Text(
                     when {
-                        turnsPage -> "Página ›"
                         hasChoices -> "Escolha"
                         isFinalButton -> "Fim"
                         else -> "Próximo"

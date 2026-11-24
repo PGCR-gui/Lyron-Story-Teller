@@ -227,6 +227,13 @@ fun StoryVerseApp() {
     var viewingAuthorOwnerId by remember { mutableStateOf<String?>(null) }
     var viewingAuthorName by remember { mutableStateOf("") }
     var authorProfileReturnScreen by remember { mutableStateOf(AppScreen.DETAILS) }
+    var selectedRemote by remember { mutableStateOf<RemoteStory?>(null) }
+    var remoteDetailsReturnScreen by remember { mutableStateOf(AppScreen.HOME) }
+    fun openRemoteDetails(remote: RemoteStory, returnTo: AppScreen) {
+        selectedRemote = remote
+        remoteDetailsReturnScreen = returnTo
+        currentScreen = AppScreen.REMOTE_DETAILS
+    }
     LaunchedEffect(Unit) {
         createNotificationChannels(context)
         scheduleNewContentChecks(context)
@@ -258,18 +265,26 @@ fun StoryVerseApp() {
                 val bytes = withContext(Dispatchers.IO) { downloadStoryBytesCached(context, remote) }
                 val tmp = java.io.File(context.cacheDir, "online_${remote.id}.lyr")
                 tmp.writeBytes(bytes)
-                val imported = withContext(Dispatchers.IO) {
+                val importedRaw = withContext(Dispatchers.IO) {
                     importStoryFromLyr(context, android.net.Uri.fromFile(tmp))
-                }.copy(
+                }
+                // A cópia baixada vem como somente leitura e com o mesmo id da original. Se a pessoa já tem a
+                // versão editável (a história é dela), a cópia ganha um id novo para não substituí-la.
+                val clashesWithEditable = userStories.any {
+                    it.editable && (it.id == importedRaw.id || (it.remoteId != null && it.remoteId == remote.id))
+                }
+                val imported = importedRaw.copy(
+                    id = if (clashesWithEditable) java.util.UUID.randomUUID().toString() else importedRaw.id,
+                    editable = if (clashesWithEditable) false else importedRaw.editable,
                     remoteId = remote.id,
                     remoteUpdatedAt = remote.updatedAt,
                     remoteOwnerId = remote.ownerId,
                     lastUpdated = System.currentTimeMillis()
                 )
                 tmp.delete()
-                // Remove versão antiga da mesma história remota, se houver
-                userStories.removeAll { it.remoteId != null && it.remoteId == remote.id }
-                userStories.removeAll { it.id == imported.id }
+                // Troca só a cópia baixada anterior da mesma história remota; versões editáveis nunca são removidas.
+                userStories.removeAll { !it.editable && it.remoteId != null && it.remoteId == remote.id }
+                userStories.removeAll { !it.editable && it.id == imported.id }
                 userStories.add(0, imported)
                 saveUserStories(context, userStories)
                 selectedStory = imported
@@ -624,6 +639,7 @@ fun StoryVerseApp() {
                 AppScreen.EDITOR -> AppScreen.LIBRARY
                 AppScreen.SETTINGS, AppScreen.MANAGE_POSTED, AppScreen.CREATE_ACCOUNT -> AppScreen.PROFILE
                 AppScreen.AUTHOR_PROFILE -> authorProfileReturnScreen
+                AppScreen.REMOTE_DETAILS -> remoteDetailsReturnScreen
                 AppScreen.SETTINGS_PROFILE,
                 AppScreen.SETTINGS_APPEARANCE,
                 AppScreen.SETTINGS_READER,
@@ -675,6 +691,7 @@ fun StoryVerseApp() {
                                 currentScreen == AppScreen.MANAGE_POSTED -> "Histórias postadas"
                                 currentScreen == AppScreen.CREATE_ACCOUNT -> "Criar conta"
                                 currentScreen == AppScreen.AUTHOR_PROFILE -> "Perfil do autor"
+                                currentScreen == AppScreen.REMOTE_DETAILS -> "Detalhes da história"
                                 currentScreen == AppScreen.EDITOR && editingChapterIndex != null -> "Editar capítulo"
                                 currentScreen == AppScreen.EDITOR -> "Editor de histórias"
                                 else -> "Lyron Story Teller"
@@ -695,6 +712,7 @@ fun StoryVerseApp() {
                                     AppScreen.EDITOR -> AppScreen.LIBRARY
                                     AppScreen.SETTINGS, AppScreen.MANAGE_POSTED, AppScreen.CREATE_ACCOUNT -> AppScreen.PROFILE
                                     AppScreen.AUTHOR_PROFILE -> authorProfileReturnScreen
+                AppScreen.REMOTE_DETAILS -> remoteDetailsReturnScreen
                                     AppScreen.SETTINGS_PROFILE,
                                     AppScreen.SETTINGS_APPEARANCE,
                                     AppScreen.SETTINGS_READER,
@@ -746,7 +764,7 @@ fun StoryVerseApp() {
             if (isMainScreen) {
                 NavigationBar(containerColor = CardColor, contentColor = PrimaryText) {
                     val tabs = listOf("Explorar", "Pesquisar", "Biblioteca", "Perfil")
-                    val symbols = listOf("꧂", "⌕", "✍", "𖠌")
+                    val iconNames = listOf("explorar", "pesquisar", "biblioteca", "perfil")
                     val destinations = listOf(
                         AppScreen.HOME,
                         AppScreen.EXPLORE,
@@ -757,7 +775,13 @@ fun StoryVerseApp() {
                         NavigationBarItem(
                             selected = selectedTab == index,
                             onClick = { currentScreen = destinations[index] },
-                            icon = { Text(symbols[index], fontSize = 23.sp) },
+                            icon = {
+                                AssetIcon(
+                                    AssetIcons.nav(iconNames[index], selectedTab == index),
+                                    Modifier.size(30.dp),
+                                    contentDescription = title
+                                )
+                            },
                             label = { Text(title, fontSize = 11.sp) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Accent,
@@ -827,7 +851,9 @@ fun StoryVerseApp() {
                     onMessage = { transferMessage = it },
                     onAuthorClick = { ownerId, authorName ->
                         openAuthorProfile(ownerId, authorName, AppScreen.HOME)
-                    }
+                    },
+                    onOpenDetails = { openRemoteDetails(it, AppScreen.HOME) },
+                    favoriteRemoteIds = userStories.filter { it.id in favoriteIds }.mapNotNull { it.remoteId }.toSet()
                 )
                 AppScreen.EXPLORE -> ExploreScreen(
                     allStories = (userStories + if (appSettings.showSampleStories) sampleStories else emptyList())
@@ -841,7 +867,9 @@ fun StoryVerseApp() {
                     onImportRemote = { importRemoteStory(it) },
                     onAuthorClick = { ownerId, authorName ->
                         openAuthorProfile(ownerId, authorName, AppScreen.EXPLORE)
-                    }
+                    },
+                    onOpenDetails = { openRemoteDetails(it, AppScreen.EXPLORE) },
+                    favoriteRemoteIds = userStories.filter { it.id in favoriteIds }.mapNotNull { it.remoteId }.toSet()
                 )
                 AppScreen.LIBRARY -> LibraryScreen(
                     userWritten = userStories.filter { it.editable }.toList(),
@@ -1085,6 +1113,7 @@ fun StoryVerseApp() {
                                         saveUserStories(context, userStories)
                                     }
                                 }
+                                CatalogStore.invalidate()
                                 saveToast = "História publicada"
                             } catch (e: Exception) {
                                 transferMessage = "Falha ao publicar: ${e.message ?: "erro"}"
@@ -1106,6 +1135,33 @@ fun StoryVerseApp() {
                         }
                     } else null
                 )
+                AppScreen.REMOTE_DETAILS -> selectedRemote?.let { remote ->
+                    RemoteStoryDetailsScreen(
+                        remote = remote,
+                        isLoggedIn = isLoggedIn,
+                        busy = onlineBusy,
+                        localCopy = userStories.firstOrNull { !it.editable && it.remoteId != null && it.remoteId == remote.id },
+                        editableCopy = userStories.firstOrNull { it.editable && it.remoteId != null && it.remoteId == remote.id },
+                        isFavorite = userStories.any { it.id in favoriteIds && it.remoteId != null && it.remoteId == remote.id },
+                        onOpenEditable = {
+                            userStories.firstOrNull { it.editable && it.remoteId != null && it.remoteId == remote.id }?.let {
+                                selectedStory = it
+                                currentScreen = AppScreen.DETAILS
+                            }
+                        },
+                        onDownload = { importRemoteStory(remote) },
+                        onOpenLocal = {
+                            userStories.firstOrNull { !it.editable && it.remoteId != null && it.remoteId == remote.id }?.let {
+                                selectedStory = it
+                                currentScreen = AppScreen.DETAILS
+                            }
+                        },
+                        onAuthorClick = { openAuthorProfile(remote.ownerId, remote.author, AppScreen.REMOTE_DETAILS) },
+                        onClose = { currentScreen = remoteDetailsReturnScreen },
+                        onToast = { saveToast = it },
+                        onMessage = { transferMessage = it }
+                    )
+                } ?: Unit
                 AppScreen.AUTHOR_PROFILE -> AuthorProfileScreen(
                     ownerId = viewingAuthorOwnerId,
                     authorName = viewingAuthorName,

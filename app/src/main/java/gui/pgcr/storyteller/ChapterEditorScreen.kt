@@ -339,7 +339,7 @@ internal fun ChapterEditorScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Rascunho", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-                        Text("Capítulos em rascunho não entram na leitura pública.", color = SecondaryText, fontSize = 12.sp)
+                        Text("Capítulos em rascunho não devem entrar na leitura pública.", color = SecondaryText, fontSize = 12.sp)
                     }
                     Switch(
                         checked = chapter.isDraft,

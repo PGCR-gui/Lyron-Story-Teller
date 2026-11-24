@@ -155,21 +155,21 @@ internal fun RemoteCoverImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     /** Ex.: updatedAt da história; entra na chave do cache para uma capa trocada não ficar velha. */
-    version: String? = null
+    version: String? = null,
+    /** Maior lado decodificado: miniaturas usam valores menores (menos memória), a capa dos detalhes usa o padrão. */
+    maxDimension: Int = 1024
 ) {
     val context = LocalContext.current
-    val bitmap by produceState<Bitmap?>(initialValue = null, coverPath, version) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, coverPath, version, maxDimension) {
         // memória → disco → rede (veja OfflineCache.kt); funciona sem internet depois da 1ª vez.
         value = if (coverPath.isNullOrBlank()) null else withContext(Dispatchers.IO) {
-            runCatching { loadCoverBitmap(context, coverPath, version) }.getOrNull()
+            runCatching { loadCoverBitmap(context, coverPath, version, maxDimension) }.getOrNull()
         }
     }
     if (bitmap != null) {
         Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = null, modifier = modifier, contentScale = contentScale)
     } else {
-        Box(modifier = modifier.background(SurfaceAlt, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-            Text("✍", color = Accent, fontSize = 28.sp)
-        }
+        DefaultCoverPlaceholder(modifier)
     }
 }
 

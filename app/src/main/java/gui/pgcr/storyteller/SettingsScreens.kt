@@ -410,6 +410,7 @@ internal fun SettingsContentScreen(
 
 @Composable
 internal fun SettingsAboutScreen() {
+    val aboutContext = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -427,7 +428,7 @@ internal fun SettingsAboutScreen() {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Lyron Story Teller", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Versão de testes 0.05", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Versão ${installedVersionName(aboutContext)}", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Tudo aqui ainda é muito experimental e se encontra em processo de desenvolvimento. " +
                         "Crie histórias lineares ou interativas, exporte pacotes .lyr com mídias e leia no seu ritmo.",
@@ -438,7 +439,8 @@ internal fun SettingsAboutScreen() {
             }
         }
 
-        val aboutContext = LocalContext.current
+        UpdaterCard()
+
         Card(
             colors = CardDefaults.cardColors(containerColor = CardColor),
             shape = RoundedCornerShape(18.dp),
@@ -462,9 +464,9 @@ internal fun SettingsAboutScreen() {
                             .background(Color(0xFFFFF4DC))
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Ícone do app", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Ícones do app", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Ícone criado por Magnific, via Flaticon.",
+                            "Os ícones gerais do app são de Magnific, via Flaticon.",
                             color = SecondaryText,
                             fontSize = 13.sp,
                             lineHeight = 19.sp
@@ -480,16 +482,48 @@ internal fun SettingsAboutScreen() {
                     modifier = Modifier.clickable {
                         runCatching {
                             aboutContext.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.flaticon.com/br/autores/magnific"))
+                                Intent(Intent.ACTION_VIEW, Uri.parse(FLATICON_MAGNIFIC_URL))
                             )
                         }
                     }
                 )
                 Text(
-                    "Aviso: este é um ícone temporário e será substituído por um ícone próprio em uma versão futura.",
+                    "Aviso: o ícone do aplicativo (na tela inicial) é temporário e será substituído por um ícone próprio em uma versão futura.",
                     color = SecondaryText,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
+                )
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Outros projetos", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Lyron Music Player", color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Outro projeto do mesmo desenvolvedor: um player de música rico em funções e milionário em bugs.",
+                    color = SecondaryText,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
+                Text(
+                    "Lyron Music Player no GitHub",
+                    color = Accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.clickable {
+                        runCatching {
+                            aboutContext.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(MUSIC_PLAYER_URL)))
+                        }
+                    }
                 )
             }
         }

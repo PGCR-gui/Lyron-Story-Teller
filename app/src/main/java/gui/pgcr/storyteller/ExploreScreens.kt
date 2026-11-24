@@ -121,155 +121,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@Composable
-internal fun OnlineExploreScreen(
-    isLoggedIn: Boolean,
-    busy: Boolean,
-    onImportRemote: (RemoteStory) -> Unit,
-    onNeedLogin: () -> Unit,
-    onToast: (String) -> Unit,
-    onMessage: (String) -> Unit,
-    onAuthorClick: (ownerId: String?, authorName: String) -> Unit = { _, _ -> }
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var pendingUnpublish by remember { mutableStateOf<RemoteStory?>(null) }
-    var unpublishing by remember { mutableStateOf(false) }
-    var stories by remember { mutableStateOf<List<RemoteStory>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var refreshTick by remember { mutableStateOf(0) }
-
-    LaunchedEffect(refreshTick) {
-        // Mostra na hora o catálogo salvo (se houver) enquanto a versão nova carrega.
-        val cached = if (stories.isEmpty()) withContext(Dispatchers.IO) { loadCatalogCache(context) } else null
-        if (cached != null && cached.isNotEmpty()) {
-            stories = cached.take(40)
-            loading = false
-        } else {
-            loading = true
-        }
-        error = null
-        try {
-            stories = withContext(Dispatchers.IO) { fetchPublicStoriesCached(context) }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            error = e.message ?: "Não foi possível carregar o catálogo online."
-            stories = emptyList()
-        } finally {
-            loading = false
-        }
-    }
-
-    pendingUnpublish?.let { target ->
-        AlertDialog(
-            onDismissRequest = { if (!unpublishing) pendingUnpublish = null },
-            title = { Text("Remover história?") },
-            text = {
-                Text(
-                    "“${target.title}” sai do catálogo online e o arquivo é apagado do servidor. " +
-                        "Cópias já baixadas por outras pessoas continuam com elas. Sua cópia local não é afetada."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !unpublishing,
-                    onClick = {
-                        unpublishing = true
-                        scope.launch {
-                            try {
-                                withContext(Dispatchers.IO) { unpublishStory(target) }
-                                pendingUnpublish = null
-                                refreshTick++
-                                onToast("História removida")
-                            } catch (e: Exception) {
-                                pendingUnpublish = null
-                                onMessage("Não foi possível remover: ${e.message ?: "erro"}")
-                            } finally {
-                                unpublishing = false
-                            }
-                        }
-                    }
-                ) { Text(if (unpublishing) "Aguarde…" else "Remover", color = DangerColor) }
-            },
-            dismissButton = {
-                TextButton(enabled = !unpublishing, onClick = { pendingUnpublish = null }) {
-                    Text("Cancelar", color = SecondaryText)
-                }
-            },
-            containerColor = CardColor,
-            titleContentColor = PrimaryText,
-            textContentColor = SecondaryText
-        )
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Explorar", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text("Explorar no Story Teller", color = PrimaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "Histórias públicas hospedadas no Supabase. Baixe para ler e guardar na biblioteca.",
-                    color = SecondaryText,
-                    fontSize = 14.sp
-                )
-                if (catalogOffline.value) {
-                    Text(
-                        "Sem conexão: mostrando a última versão salva no aparelho.",
-                        color = WarnColor,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = { refreshTick++ }, enabled = !loading && !busy) {
-                    Text("Atualizar", color = Accent)
-                }
-                if (!isLoggedIn) {
-                    TextButton(onClick = onNeedLogin) {
-                        Text("Entrar para publicar", color = Accent)
-                    }
-                }
-            }
-        }
-        when {
-            loading -> item {
-                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Accent)
-                }
-            }
-            error != null -> item {
-                Text(error ?: "", color = DangerColor, fontSize = 14.sp)
-            }
-            stories.isEmpty() -> item {
-                Text(
-                    "Nenhuma história pública ainda. Faça login no Perfil e publique a sua pela tela de detalhes.",
-                    color = SecondaryText,
-                    fontSize = 14.sp
-                )
-            }
-            else -> items(stories, key = { it.id ?: it.title }) { remote ->
-                RemoteStoryCard(
-                    remote = remote,
-                    isLoggedIn = isLoggedIn,
-                    busy = busy,
-                    onImportRemote = onImportRemote,
-                    onAuthorClick = onAuthorClick,
-                    onRequestUnpublish = { pendingUnpublish = it },
-                    unpublishEnabled = !unpublishing
-                )
-            }
-        }
-    }
-}
-
 /** Cartão de uma história do catálogo online (usado em Explorar e na Pesquisa). */
 @Composable
 internal fun RemoteStoryCard(
@@ -279,22 +130,42 @@ internal fun RemoteStoryCard(
     onImportRemote: (RemoteStory) -> Unit,
     onAuthorClick: (ownerId: String?, authorName: String) -> Unit,
     onRequestUnpublish: ((RemoteStory) -> Unit)? = null,
-    unpublishEnabled: Boolean = true
+    unpublishEnabled: Boolean = true,
+    /** Se informado, tocar no cartão abre a tela de detalhes da história online. */
+    onOpenDetails: ((RemoteStory) -> Unit)? = null,
+    /** Selo de destaque (“NOVA”, “ATUALIZADA”). */
+    badge: String? = null,
+    /** Mostra o ícone de favorita quando a pessoa favoritou a cópia desta história. */
+    isFavorite: Boolean = false
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = CardColor),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth()
+            .then(if (onOpenDetails != null) Modifier.clickable { onOpenDetails(remote) } else Modifier)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 RemoteCoverImage(
                     remote.coverPath,
                     Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)),
-                    version = remote.updatedAt
+                    version = remote.updatedAt,
+                    maxDimension = 384
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(remote.title, color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    if (badge != null) {
+                        Text(badge, color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            remote.title,
+                            color = PrimaryText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isFavorite) AssetIcon(AssetIcons.FAVORITE, Modifier.size(22.dp), contentDescription = "Favorita")
+                    }
                     Text(
                         "por ${remote.author}",
                         color = Accent,
@@ -689,7 +560,7 @@ internal fun StoryCard(story: Story, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 if (story.coverImageUri != null) StoredImage(story.coverImageUri, Modifier.fillMaxSize(), maxDimension = 256)
-                else Text("✍", color = Accent, fontSize = 30.sp)
+                else AssetIcon(AssetIcons.DEFAULT_COVER, Modifier.fillMaxSize(0.7f))
                 Image(
                     painter = painterResource(id = classifDrawableRes(story.rating)),
                     contentDescription = story.rating,
@@ -736,7 +607,9 @@ internal fun ExploreScreen(
     busy: Boolean,
     onStoryClick: (Story) -> Unit,
     onImportRemote: (RemoteStory) -> Unit,
-    onAuthorClick: (ownerId: String?, authorName: String) -> Unit = { _, _ -> }
+    onAuthorClick: (ownerId: String?, authorName: String) -> Unit = { _, _ -> },
+    onOpenDetails: ((RemoteStory) -> Unit)? = null,
+    favoriteRemoteIds: Set<String> = emptySet()
 ) {
     var query by remember { mutableStateOf("") }
     var genreFilter by remember { mutableStateOf<String?>(null) }
@@ -744,30 +617,10 @@ internal fun ExploreScreen(
 
     // Catálogo online: a pesquisa precisa enxergar as histórias públicas, não só a biblioteca local.
     val searchContext = LocalContext.current
-    var onlineStories by remember { mutableStateOf<List<RemoteStory>>(emptyList()) }
-    var onlineLoading by remember { mutableStateOf(true) }
-    var onlineError by remember { mutableStateOf<String?>(null) }
-    var refreshTick by remember { mutableStateOf(0) }
-    LaunchedEffect(refreshTick) {
-        val cached = if (onlineStories.isEmpty()) withContext(Dispatchers.IO) { loadCatalogCache(searchContext) } else null
-        if (cached != null && cached.isNotEmpty()) {
-            onlineStories = cached.take(500)
-            onlineLoading = false
-        } else {
-            onlineLoading = true
-        }
-        onlineError = null
-        try {
-            onlineStories = withContext(Dispatchers.IO) { fetchPublicStoriesCached(searchContext, limit = 500) }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            onlineError = e.message ?: "Não foi possível carregar as histórias online."
-            onlineStories = emptyList()
-        } finally {
-            onlineLoading = false
-        }
-    }
+    LaunchedEffect(Unit) { CatalogStore.refresh(searchContext) }
+    val onlineStories = CatalogStore.stories
+    val onlineLoading = CatalogStore.initialLoading && onlineStories.isEmpty()
+    val onlineError = if (onlineStories.isEmpty()) CatalogStore.error else null
 
     // O que já foi baixado aparece uma vez só, como história da biblioteca.
     val downloadedRemoteIds = remember(allStories) { allStories.mapNotNull { it.remoteId }.toSet() }
@@ -901,7 +754,7 @@ internal fun ExploreScreen(
             onlineError != null -> item(key = "online_error") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(onlineError ?: "", color = DangerColor, fontSize = 14.sp)
-                    TextButton(onClick = { refreshTick++ }) { Text("Tentar novamente", color = Accent) }
+                    TextButton(onClick = { CatalogStore.refresh(searchContext, force = true) }) { Text("Tentar novamente", color = Accent) }
                 }
             }
             filteredOnline.isEmpty() -> item(key = "online_empty") {
@@ -918,7 +771,9 @@ internal fun ExploreScreen(
                     isLoggedIn = isLoggedIn,
                     busy = busy,
                     onImportRemote = onImportRemote,
-                    onAuthorClick = onAuthorClick
+                    onAuthorClick = onAuthorClick,
+                    onOpenDetails = onOpenDetails,
+                    isFavorite = remote.id != null && remote.id in favoriteRemoteIds
                 )
             }
         }

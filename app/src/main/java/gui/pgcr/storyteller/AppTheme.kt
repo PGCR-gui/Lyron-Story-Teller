@@ -315,8 +315,8 @@ internal val READER_THEME_OPTIONS = listOf(
     "sepia" to "Sepia Literary",
     "dark_obsidian" to "Dark Obsidian",
     "amethyst_night" to "Amethyst Night",
-    "dawn_mist" to "Dawn Mist (claro)",
-    "forest_night" to "Forest Night (escuro)"
+    "dawn_mist" to "Dawn Mist",
+    "forest_night" to "Forest Night"
 )
 
 internal val READER_FONT_OPTIONS = listOf(

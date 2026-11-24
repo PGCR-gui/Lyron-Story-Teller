@@ -73,8 +73,8 @@ android {
         applicationId = "gui.pgcr.storyteller"  
         minSdk = 26  
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.09"
+        versionCode = 10
+        versionName = "0.10"
         
         vectorDrawables { 
             useSupportLibrary = true
